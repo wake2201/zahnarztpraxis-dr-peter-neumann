@@ -1,0 +1,81 @@
+// Prisma Schema für Zahnarztpraxis Dr. Peter Neumann
+// Datenbank: PostgreSQL
+
+generator client {
+  provider        = "prisma-client-js"
+  output          = "../src/generated/prisma"
+  previewFeatures = ["driverAdapters"]
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+/// Kontaktanfragen von Patienten über das Website-Formular.
+/// DSGVO-Hinweis: Einträge können unwiderruflich gelöscht werden (Art. 17 DSGVO – Recht auf Löschung).
+model ContactRequest {
+  id          String   @id @default(cuid())
+  firstName   String   @map("first_name")
+  lastName    String   @map("last_name")
+  countryCode String   @default("+49") @map("country_code")
+  phone       String
+  message     String   @db.Text
+  gdprConsent Boolean  @default(true) @map("gdpr_consent")
+  read        Boolean  @default(false)
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([createdAt])
+  @@map("contact_requests")
+}
+
+/// Admin-/Mitarbeiter-Benutzer für den geschützten Verwaltungsbereich.
+/// Rollen: "admin" (voller Zugriff, Benutzerverwaltung, Logs) | "staff" (Anfragen verwalten)
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String   // bcrypt-gehashed
+  name      String?
+  role      String   @default("staff") // "admin" | "staff"
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("users")
+}
+
+/// Login-Versuche für DB-basiertes Rate-Limiting.
+/// Identifier = SHA-256(IP + UserAgent) — nicht umkehrbar.
+model LoginAttempt {
+  id          String    @id @default(cuid())
+  identifier  String    @unique
+  attempts    Int       @default(0)
+  lockedUntil DateTime? @map("locked_until")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  @@index([lockedUntil])
+  @@map("login_attempts")
+}
+
+/// Audit-Log: Protokolliert Admin-Aktionen (Löschungen, Logins, Account-Verwaltung).
+/// Nur für Admin-Benutzer sichtbar.
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  userName  String   @map("user_name")
+  action    String   // DELETE_REQUEST | LOGIN | CREATE_USER | DELETE_USER
+  details   String?  @db.Text
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+/// DB-basiertes Rate-Limiting für öffentliche Endpunkte (Kontaktformular).
+/// Ersetzt die In-Memory Map, damit das Limit serverless-/multi-instance-sicher ist.
+model RateLimit {
+  id        String   @id @default(cuid())
+  ip        String   @unique
+  attempts  Int      @default(0)
+  lastReset DateTime @default(now()) @map("last_reset")
+
+  @@index([lastReset])
+  @@map("rate_limits")
+}
