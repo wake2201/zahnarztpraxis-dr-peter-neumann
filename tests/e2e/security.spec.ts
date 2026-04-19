@@ -1,8 +1,13 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, APIResponse } from "@playwright/test";
 import { cleanupLoginAttempts, disconnectPrisma } from "./helpers/db-cleanup";
 
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || "admin@zeitzer-zahnarzt.de";
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "Admin123!";
+
+async function expectInvalidInputResponse(response: APIResponse) {
+  const body = await response.json();
+  expect(body).toEqual({ error: "Ungültige Eingabe." });
+}
 
 test.use({ viewport: { width: 1280, height: 720 } });
 
@@ -30,7 +35,6 @@ test.describe("Security — Edge Cases", () => {
     expect(res.headers()["x-frame-options"]).toBe("DENY");
     expect(res.headers()["x-content-type-options"]).toBe("nosniff");
     expect(res.headers()["strict-transport-security"]).toContain("max-age=");
-    // Öffentliche Seite DARF noindex nicht haben (nur /admin).
     expect(res.headers()["x-robots-tag"]).toBeUndefined();
   });
 
@@ -59,15 +63,66 @@ test.describe("Security — Edge Cases", () => {
       await page.getByLabel("Passwort").fill("WrongPassword1!");
       await page.getByRole("button", { name: "Anmelden" }).click();
       if (i < 2) {
-        await expect(page.getByText("Ungültige Anmeldedaten")).toBeVisible({ timeout: 10_000 });
+        await expect(page.getByText("Ungültige Anmeldedaten. Bitte versuchen Sie es erneut.")).toBeVisible({
+          timeout: 10_000,
+        });
       }
     }
     await expect(page.getByText(/Gesperrt für noch \d+ Minute/i)).toBeVisible({ timeout: 10_000 });
 
-    // Selbst mit korrektem Passwort bleibt Lockout aktiv
     await page.getByLabel("E-Mail").fill(ADMIN_EMAIL);
     await page.getByLabel("Passwort").fill(ADMIN_PASSWORD);
     await page.getByRole("button", { name: "Anmelden" }).click();
     await expect(page.getByText(/Gesperrt/i)).toBeVisible({ timeout: 10_000 });
+  });
+
+  test("Client-Error-Route akzeptiert gültige Payloads", async ({ request }) => {
+    const res = await request.post("/api/log/client-error", {
+      data: {
+        message: "Playwright client error",
+        stack: "Error: Playwright client error",
+        digest: "digest-123",
+        pathname: "/admin",
+      },
+    });
+
+    expect(res.status()).toBe(204);
+  });
+
+  test("Client-Error-Route lehnt kaputtes JSON ab", async ({ request }) => {
+    const res = await request.post("/api/log/client-error", {
+      headers: {
+        "Content-Type": "application/json",
+      },
+      data: "{\"message\":",
+    });
+
+    expect(res.status()).toBe(400);
+    await expectInvalidInputResponse(res);
+  });
+
+  test("Client-Error-Route lehnt falsche Feldtypen ab", async ({ request }) => {
+    const res = await request.post("/api/log/client-error", {
+      data: {
+        message: 123,
+        stack: true,
+        digest: ["digest"],
+        pathname: { value: "/admin" },
+      },
+    });
+
+    expect(res.status()).toBe(400);
+    await expectInvalidInputResponse(res);
+  });
+
+  test("Client-Error-Route lehnt zu lange Nachrichten ab", async ({ request }) => {
+    const res = await request.post("/api/log/client-error", {
+      data: {
+        message: "x".repeat(501),
+      },
+    });
+
+    expect(res.status()).toBe(400);
+    await expectInvalidInputResponse(res);
   });
 });
