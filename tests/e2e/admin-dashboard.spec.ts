@@ -1,6 +1,5 @@
 import { test, expect, Page } from "@playwright/test";
-import { cleanupLoginAttempts, disconnectPrisma } from "./helpers/db-cleanup";
-import { prisma } from "../../src/lib/prisma";
+import { cleanupLoginAttempts, cleanupUsersByEmail, disconnectPrisma } from "./helpers/db-cleanup";
 
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || "admin@zeitzer-zahnarzt.de";
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "Admin123!";
@@ -25,9 +24,7 @@ test.describe("Admin Dashboard", () => {
 
   test.afterAll(async () => {
     // Test-Mitarbeiter bereinigen (falls erstellt)
-    await prisma.user.deleteMany({
-      where: { email: "e2e-staff@test.de" },
-    });
+    await cleanupUsersByEmail(["e2e-staff@test.de"]);
     await cleanupLoginAttempts();
     await disconnectPrisma();
   });
@@ -82,7 +79,7 @@ test.describe("Admin Dashboard", () => {
 
     await nameInput.fill("E2E Testmitarbeiter");
     await emailInput.fill("e2e-staff@test.de");
-    await passwordInput.fill("Test1234");
+    await passwordInput.fill("Test1234!");
 
     await page.getByRole("button", { name: /Mitarbeiter erstellen/i }).click();
 

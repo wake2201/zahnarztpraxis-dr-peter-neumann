@@ -1,14 +1,20 @@
 "use server";
 
-import { prisma } from "../prisma";
 import { after } from "next/server";
+import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { contactFormSchema, ERROR_MESSAGES } from "../schemas";
+import { prisma } from "../prisma";
+import {
+  actionCursorSchema,
+  actionIdSchema,
+  contactFormSchema,
+  ERROR_MESSAGES,
+  toggleReadStatusSchema,
+} from "../schemas";
 import { checkRateLimitDb, cleanupExpiredRateLimits } from "../rate-limit";
 import { logger } from "../logger";
 import { getClientIp } from "../client-ip";
 import { requireAuth } from "./auth-helpers";
-import { revalidatePath } from "next/cache";
 
 const MAX_REQUESTS_PER_PAGE = 50;
 
@@ -20,7 +26,7 @@ export async function submitContactForm(data: z.input<typeof contactFormSchema>)
       return { success: false, error: ERROR_MESSAGES.rateLimited };
     }
 
-    // Honeypot trifft Bot — identische Success-Antwort verrät nichts.
+    // Honeypot trifft Bot - identische Success-Antwort verraet nichts.
     if (typeof data.honeypot === "string" && data.honeypot.length > 0) {
       logger.info({ action: "submitContactForm", honeypot: "triggered" }, "Honeypot-Treffer");
       return { success: true };
@@ -37,15 +43,17 @@ export async function submitContactForm(data: z.input<typeof contactFormSchema>)
       return { success: false, error: ERROR_MESSAGES.phoneInvalid };
     }
 
-    await prisma.contactRequest.create({
-      data: {
-        firstName: parsed.data.firstName,
-        lastName: parsed.data.lastName,
-        countryCode: parsed.data.countryCode,
-        phone: cleanPhone,
-        message: parsed.data.message,
-        gdprConsent: parsed.data.gdprConsent,
-      },
+    await prisma.$transaction(async (tx) => {
+      await tx.contactRequest.create({
+        data: {
+          firstName: parsed.data.firstName,
+          lastName: parsed.data.lastName,
+          countryCode: parsed.data.countryCode,
+          phone: cleanPhone,
+          message: parsed.data.message,
+          gdprConsent: parsed.data.gdprConsent,
+        },
+      });
     });
 
     after(async () => {
@@ -66,64 +74,101 @@ export async function submitContactForm(data: z.input<typeof contactFormSchema>)
 export async function getContactRequests(cursor?: string) {
   await requireAuth();
 
+  const parsedCursor = actionCursorSchema.safeParse(cursor);
+  if (!parsedCursor.success) {
+    return [];
+  }
+
   const requests = await prisma.contactRequest.findMany({
     take: MAX_REQUESTS_PER_PAGE,
-    ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
+    ...(parsedCursor.data ? { skip: 1, cursor: { id: parsedCursor.data } } : {}),
     orderBy: { createdAt: "desc" },
   });
 
-  return requests.map(req => ({
-    ...req,
-    createdAt: req.createdAt.toISOString(),
+  return requests.map((request) => ({
+    ...request,
+    createdAt: request.createdAt.toISOString(),
   }));
 }
 
 /**
- * Der gewünschte Status wird vom Client übergeben — vermeidet TOCTOU Race.
+ * Der gewuenschte Status wird vom Client uebergeben.
+ * Die Datenbank schreibt direkt den Zielzustand und vermeidet ein read-modify-write-Rennen.
  */
 export async function toggleReadStatus(id: string, newReadStatus: boolean) {
   await requireAuth();
 
+  const parsed = toggleReadStatusSchema.safeParse({ id, newReadStatus });
+  if (!parsed.success) {
+    return { success: false, error: ERROR_MESSAGES.invalidInput };
+  }
+
   try {
-    await prisma.contactRequest.update({
-      where: { id },
-      data: { read: newReadStatus },
+    const updatedCount = await prisma.$transaction(async (tx) => {
+      const updated = await tx.contactRequest.updateMany({
+        where: { id: parsed.data.id },
+        data: { read: parsed.data.newReadStatus },
+      });
+      return updated.count;
     });
+
+    if (updatedCount === 0) {
+      return { success: false, error: ERROR_MESSAGES.requestNotFound };
+    }
 
     revalidatePath("/admin");
     return { success: true };
   } catch (error) {
-    logger.error({ err: error, action: "toggleReadStatus", requestId: id }, "[toggleReadStatus] fehlgeschlagen");
+    logger.error(
+      { err: error, action: "toggleReadStatus", requestId: parsed.data.id },
+      "[toggleReadStatus] fehlgeschlagen",
+    );
     return { success: false, error: ERROR_MESSAGES.statusUpdateFailed };
   }
 }
 
 /**
- * DSGVO Art. 17 — Recht auf Löschung. Audit-Log + Delete atomar.
+ * DSGVO Art. 17 - Recht auf Loeschung. Audit-Log + Delete bleiben atomar.
  */
 export async function deleteContactRequest(id: string) {
   const session = await requireAuth();
+  const parsed = actionIdSchema.safeParse(id);
+  if (!parsed.success) {
+    return { success: false, error: ERROR_MESSAGES.invalidInput };
+  }
 
   try {
-    const request = await prisma.contactRequest.findUnique({ where: { id } });
-    if (!request) return { success: false, error: ERROR_MESSAGES.requestNotFound };
+    const deleted = await prisma.$transaction(async (tx) => {
+      const deleteResult = await tx.contactRequest.deleteMany({
+        where: { id: parsed.data },
+      });
+      if (deleteResult.count === 0) {
+        return false;
+      }
 
-    await prisma.$transaction([
-      prisma.auditLog.create({
+      await tx.auditLog.create({
         data: {
           userId: session.user.id,
-          userName: session.user?.name || session.user?.email || "Unbekannt",
+          userName: session.user.name || session.user.email || "Unbekannt",
           action: "DELETE_REQUEST",
-          details: `Kontaktanfrage gelöscht (ID: ${request.id})`,
+          details: `Kontaktanfrage geloescht (ID: ${parsed.data})`,
         },
-      }),
-      prisma.contactRequest.delete({ where: { id } }),
-    ]);
+      });
+
+      return true;
+    });
+
+    if (!deleted) {
+      return { success: false, error: ERROR_MESSAGES.requestNotFound };
+    }
 
     revalidatePath("/admin");
     return { success: true };
   } catch (error) {
-    logger.error({ err: error, action: "deleteContactRequest", requestId: id }, "[deleteContactRequest] fehlgeschlagen");
+    logger.error(
+      { err: error, action: "deleteContactRequest", requestId: parsed.data },
+      "[deleteContactRequest] fehlgeschlagen",
+    );
     return { success: false, error: ERROR_MESSAGES.requestDeleteFailed };
   }
 }

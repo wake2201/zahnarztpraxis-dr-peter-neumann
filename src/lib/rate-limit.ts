@@ -33,9 +33,13 @@ export async function checkRateLimitDb(ip: string): Promise<boolean> {
 
   // Abgelaufene Einträge dieser IP nach der Response asynchron bereinigen.
   after(async () => {
-    await prisma.rateLimit.deleteMany({
-      where: { ip, lastReset: { lt: new Date(windowStartMs) } }
-    }).catch(() => {});
+    await prisma
+      .$transaction(async (tx) => {
+        await tx.rateLimit.deleteMany({
+          where: { ip, lastReset: { lt: new Date(windowStartMs) } },
+        });
+      })
+      .catch((err) => logger.error({ err, action: "checkRateLimitDb" }, "Rate-limit cleanup failed"));
   });
 
   // cuid() als Fallback-ID — wird nur beim INSERT verwendet, nicht beim UPDATE.
@@ -69,7 +73,11 @@ export async function checkRateLimitDb(ip: string): Promise<boolean> {
  */
 export async function cleanupExpiredRateLimits(): Promise<void> {
   const windowStart = new Date(Date.now() - RATE_LIMIT_WINDOW_MS);
-  await prisma.rateLimit.deleteMany({
-    where: { lastReset: { lt: windowStart } },
-  }).catch((err) => logger.error({ err, action: "cleanupExpiredRateLimits" }, "Rate-limit cleanup failed"));
+  await prisma
+    .$transaction(async (tx) => {
+      await tx.rateLimit.deleteMany({
+        where: { lastReset: { lt: windowStart } },
+      });
+    })
+    .catch((err) => logger.error({ err, action: "cleanupExpiredRateLimits" }, "Rate-limit cleanup failed"));
 }

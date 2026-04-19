@@ -1,5 +1,6 @@
 import { test, expect, Page } from "@playwright/test";
 import {
+  cleanupRateLimits,
   cleanupTestContactRequests,
   contactRequestExists,
   disconnectPrisma,
@@ -23,7 +24,12 @@ async function dismissCookieBanner(page: Page) {
 }
 
 test.describe("Kontaktformular", () => {
+  test.beforeEach(async () => {
+    await cleanupRateLimits();
+  });
+
   test.afterAll(async () => {
+    await cleanupRateLimits();
     await cleanupTestContactRequests();
     await disconnectPrisma();
   });

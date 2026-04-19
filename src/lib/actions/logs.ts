@@ -1,7 +1,7 @@
 "use server";
 
-import { prisma } from "../prisma";
 import { revalidatePath } from "next/cache";
+import { prisma } from "../prisma";
 import { ERROR_MESSAGES } from "../schemas";
 import { logger } from "../logger";
 import { requireAdmin } from "./auth-helpers";
@@ -14,7 +14,7 @@ export async function getAuditLogs() {
     take: 100,
   });
 
-  return logs.map(log => ({
+  return logs.map((log) => ({
     ...log,
     createdAt: log.createdAt.toISOString(),
   }));
@@ -24,19 +24,18 @@ export async function clearAuditLogs(): Promise<{ success: boolean; error?: stri
   const session = await requireAdmin();
 
   try {
-    const count = await prisma.auditLog.count();
+    await prisma.$transaction(async (tx) => {
+      const deleted = await tx.auditLog.deleteMany({});
 
-    await prisma.$transaction([
-      prisma.auditLog.deleteMany({}),
-      prisma.auditLog.create({
+      await tx.auditLog.create({
         data: {
           userId: session.user.id,
-          userName: session.user?.name || session.user?.email || "Admin",
+          userName: session.user.name || session.user.email || "Admin",
           action: "CLEAR_LOGS",
-          details: `${count} Log-Einträge gelöscht`,
+          details: `${deleted.count} Log-Eintraege geloescht`,
         },
-      }),
-    ]);
+      });
+    });
 
     revalidatePath("/admin");
     return { success: true };

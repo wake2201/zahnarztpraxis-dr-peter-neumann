@@ -96,3 +96,19 @@ export const createUserSchema = z.object({
       ERROR_MESSAGES.passwordComplexity
     ),
 });
+
+/**
+ * Interne Action-IDs werden strikt auf nicht-leere, kurze Strings begrenzt.
+ * Das verhindert Memory-Bombing und offensichtliche Missbrauchs-Payloads.
+ */
+export const actionIdSchema = z.preprocess(
+  clean,
+  z.string().min(1, ERROR_MESSAGES.invalidInput).max(191, ERROR_MESSAGES.invalidInput),
+);
+
+export const actionCursorSchema = actionIdSchema.optional();
+
+export const toggleReadStatusSchema = z.object({
+  id: actionIdSchema,
+  newReadStatus: z.boolean(),
+});

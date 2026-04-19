@@ -1,5 +1,6 @@
 import { test, expect } from "@playwright/test";
 import {
+  cleanupRateLimits,
   cleanupTestContactRequests,
   contactRequestExists,
   disconnectPrisma,
@@ -9,7 +10,12 @@ import {
 test.use({ viewport: { width: 1280, height: 720 } });
 
 test.describe("Chaos & Integrity", () => {
+  test.beforeEach(async () => {
+    await cleanupRateLimits();
+  });
+
   test.afterAll(async () => {
+    await cleanupRateLimits();
     await cleanupTestContactRequests();
     await disconnectPrisma();
   });
@@ -28,11 +34,11 @@ test.describe("Chaos & Integrity", () => {
     const submitBtn = page.getByRole("button", { name: "Anfrage absenden" });
     await submitBtn.scrollIntoViewIfNeeded();
 
-    await Promise.all([
-      submitBtn.dispatchEvent("click"),
-      submitBtn.dispatchEvent("click"),
-      submitBtn.dispatchEvent("click"),
-    ]);
+    await submitBtn.evaluate((button: HTMLButtonElement) => {
+      button.click();
+      button.click();
+      button.click();
+    });
 
     await expect(page.getByText("Vielen Dank für Ihre Anfrage!")).toBeVisible({ timeout: 10_000 });
 

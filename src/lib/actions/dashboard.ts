@@ -19,9 +19,13 @@ export async function getDashboardStats() {
   after(async () => {
     const sixMonthsAgo = new Date();
     sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
-    await prisma.auditLog.deleteMany({
-      where: { createdAt: { lt: sixMonthsAgo } },
-    }).catch((err) => logger.error({ err, action: "getDashboardStats" }, "Audit retention cleanup failed"));
+    await prisma
+      .$transaction(async (tx) => {
+        await tx.auditLog.deleteMany({
+          where: { createdAt: { lt: sixMonthsAgo } },
+        });
+      })
+      .catch((err) => logger.error({ err, action: "getDashboardStats" }, "Audit retention cleanup failed"));
   });
 
   return { total, unread };

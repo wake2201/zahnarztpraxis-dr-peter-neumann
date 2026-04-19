@@ -1,11 +1,12 @@
 "use server";
 
-import { prisma } from "../prisma";
-import { Prisma } from "../../generated/prisma";
-import { revalidatePath } from "next/cache";
 import bcrypt from "bcryptjs";
-import { createUserSchema, ERROR_MESSAGES } from "../schemas";
+import { revalidatePath } from "next/cache";
+import { Prisma } from "../../generated/prisma";
+import { prisma } from "../prisma";
+import { actionIdSchema, createUserSchema, ERROR_MESSAGES } from "../schemas";
 import { logger } from "../logger";
+import { normalizeRole } from "../auth";
 import { requireAdmin } from "./auth-helpers";
 
 export async function createUser(data: { email: string; password: string; name: string }) {
@@ -33,7 +34,7 @@ export async function createUser(data: { email: string; password: string; name: 
       await tx.auditLog.create({
         data: {
           userId: session.user.id,
-          userName: session.user?.name || session.user?.email || "Admin",
+          userName: session.user.name || session.user.email || "Admin",
           action: "CREATE_USER",
           details: `Neuer Mitarbeiter (ID: ${user.id})`,
         },
@@ -57,37 +58,74 @@ export async function createUser(data: { email: string; password: string; name: 
 
 export async function deleteUser(id: string) {
   const session = await requireAdmin();
+  const parsed = actionIdSchema.safeParse(id);
+  if (!parsed.success) {
+    return { success: false, error: ERROR_MESSAGES.invalidInput };
+  }
 
-  if (session.user.id === id) {
+  if (session.user.id === parsed.data) {
     return { success: false, error: ERROR_MESSAGES.selfDeleteBlocked };
   }
 
   try {
-    const targetUser = await prisma.user.findUnique({ where: { id } });
-    if (!targetUser) {
+    const result = await prisma.$transaction(async (tx) => {
+      const deleted = await tx.user.deleteMany({
+        where: {
+          id: parsed.data,
+          role: { equals: "staff", mode: "insensitive" },
+        },
+      });
+
+      if (deleted.count === 0) {
+        const existingUser = await tx.user.findUnique({
+          where: { id: parsed.data },
+          select: { role: true },
+        });
+
+        if (!existingUser) {
+          return { status: "missing" as const };
+        }
+
+        const targetRole = normalizeRole(existingUser.role);
+        if (targetRole === "admin") {
+          return { status: "protected" as const };
+        }
+
+        return { status: "invalid-role" as const };
+      }
+
+      await tx.auditLog.create({
+        data: {
+          userId: session.user.id,
+          userName: session.user.name || session.user.email || "Admin",
+          action: "DELETE_USER",
+          details: `Mitarbeiter geloescht (ID: ${parsed.data})`,
+        },
+      });
+
+      return { status: "deleted" as const };
+    });
+
+    if (result.status === "missing") {
       return { success: false, error: ERROR_MESSAGES.userNotFound };
     }
 
-    if (targetUser.role === "admin") {
+    if (result.status === "protected") {
       return { success: false, error: ERROR_MESSAGES.adminDeleteBlocked };
     }
 
-    await prisma.$transaction([
-      prisma.auditLog.create({
-        data: {
-          userId: session.user.id,
-          userName: session.user?.name || session.user?.email || "Admin",
-          action: "DELETE_USER",
-          details: `Mitarbeiter gelöscht (ID: ${targetUser.id})`,
-        },
-      }),
-      prisma.user.delete({ where: { id } }),
-    ]);
+    if (result.status === "invalid-role") {
+      logger.warn(
+        { action: "deleteUser", targetUserId: parsed.data },
+        "[deleteUser] Unbekannte Zielrolle blockiert",
+      );
+      return { success: false, error: ERROR_MESSAGES.userDeleteFailed };
+    }
 
     revalidatePath("/admin");
     return { success: true };
   } catch (error) {
-    logger.error({ err: error, action: "deleteUser", targetUserId: id }, "[deleteUser] fehlgeschlagen");
+    logger.error({ err: error, action: "deleteUser", targetUserId: parsed.data }, "[deleteUser] fehlgeschlagen");
     return { success: false, error: ERROR_MESSAGES.userDeleteFailed };
   }
 }
@@ -100,8 +138,9 @@ export async function getUsers() {
     orderBy: { createdAt: "desc" },
   });
 
-  return users.map(user => ({
+  return users.map((user) => ({
     ...user,
+    role: normalizeRole(user.role) ?? "admin",
     createdAt: user.createdAt.toISOString(),
   }));
 }

@@ -17,8 +17,11 @@ import { headers } from "next/headers";
 export async function getClientIp(): Promise<string> {
   const h = await headers();
 
+  const isVercelRuntime = process.env.VERCEL === "1";
   const vercel = h.get("x-vercel-forwarded-for");
-  if (vercel) return vercel.split(",")[0].trim();
+  if (isVercelRuntime && vercel) {
+    return vercel.split(",")[0].trim();
+  }
 
   const trustProxy = process.env.TRUST_PROXY === "true";
   if (trustProxy) {
