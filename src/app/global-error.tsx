@@ -10,9 +10,19 @@ export default function GlobalError({
   reset: () => void;
 }) {
   useEffect(() => {
-    // Client-seitiges Logging, fällt im Client auf console.error zurück,
-    // könnte aber an einen /api/log Endpoint gesendet werden.
-    console.error("Global unhandled error:", error);
+    void fetch("/api/log/client-error", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        message: error.message,
+        stack: error.stack,
+        digest: error.digest,
+        pathname: window.location.pathname,
+      }),
+      keepalive: true,
+    }).catch(() => {});
   }, [error]);
 
   return (

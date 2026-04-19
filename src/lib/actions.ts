@@ -7,8 +7,6 @@ export {
   deleteContactRequest,
 } from "./actions/contact";
 
-export { getDashboardStats } from "./actions/dashboard";
-
 export {
   createUser,
   deleteUser,

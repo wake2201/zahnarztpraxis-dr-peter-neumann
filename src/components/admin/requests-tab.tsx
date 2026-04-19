@@ -183,7 +183,3 @@ function RequestRow({ req, pending, confirmingDelete, onToggleRead, onRequestDel
     </div>
   );
 }
-
-export function useRequestsUnread(requests: ContactRequest[]) {
-  return requests.filter(r => !r.read).length;
-}

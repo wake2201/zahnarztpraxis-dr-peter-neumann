@@ -3,12 +3,40 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "../generated/prisma";
 import { logger } from "./logger";
 
-const connectionString = process.env.DATABASE_URL;
-if (!connectionString) {
+const rawConnectionString = process.env.DATABASE_URL;
+if (!rawConnectionString) {
   throw new Error(
     "DATABASE_URL nicht gesetzt. Lege .env basierend auf .env.example an.",
   );
 }
+
+function normalizeConnectionString(connectionString: string): string {
+  let parsedUrl: URL;
+
+  try {
+    parsedUrl = new URL(connectionString);
+  } catch {
+    return connectionString;
+  }
+
+  if (parsedUrl.protocol !== "postgres:" && parsedUrl.protocol !== "postgresql:") {
+    return connectionString;
+  }
+
+  if (parsedUrl.searchParams.get("uselibpqcompat") === "true") {
+    return connectionString;
+  }
+
+  const sslMode = parsedUrl.searchParams.get("sslmode");
+  if (sslMode === "prefer" || sslMode === "require" || sslMode === "verify-ca") {
+    parsedUrl.searchParams.set("sslmode", "verify-full");
+    return parsedUrl.toString();
+  }
+
+  return connectionString;
+}
+
+const connectionString = normalizeConnectionString(rawConnectionString);
 
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;

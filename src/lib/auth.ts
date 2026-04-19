@@ -14,7 +14,7 @@ const MAX_TRANSACTION_RETRIES = 3;
 const NEXTAUTH_SECRET = process.env.NEXTAUTH_SECRET;
 if (!NEXTAUTH_SECRET || NEXTAUTH_SECRET.length < 32) {
   throw new Error(
-    "NEXTAUTH_SECRET fehlt oder ist kuerzer als 32 Zeichen. Generiere mit: node -e \"console.log(require('crypto').randomBytes(48).toString('base64'))\"",
+    "NEXTAUTH_SECRET fehlt oder ist kuerzer als 32 Zeichen. Generiere mit: node -e \"process.stdout.write(require('crypto').randomBytes(48).toString('base64'))\"",
   );
 }
 

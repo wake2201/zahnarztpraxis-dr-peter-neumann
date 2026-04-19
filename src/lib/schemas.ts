@@ -53,7 +53,7 @@ export const ERROR_MESSAGES = {
  * Entfernt HTML-Tags und Null-Bytes aus User-Input.
  * Iterativer Ansatz schützt gegen verschachtelte Tags (z.B. `<scr<script>ipt>`).
  */
-export function sanitize(input: string): string {
+function sanitize(input: string): string {
   let clean = input.replace(/\0/g, "");
   let prev = "";
   while (prev !== clean) {
@@ -111,4 +111,11 @@ export const actionCursorSchema = actionIdSchema.optional();
 export const toggleReadStatusSchema = z.object({
   id: actionIdSchema,
   newReadStatus: z.boolean(),
+});
+
+export const clientErrorLogSchema = z.object({
+  message: z.preprocess(clean, z.string().min(1, ERROR_MESSAGES.invalidInput).max(500, ERROR_MESSAGES.invalidInput)),
+  stack: z.preprocess(clean, z.string().max(10_000, ERROR_MESSAGES.invalidInput)).optional(),
+  digest: z.preprocess(clean, z.string().max(255, ERROR_MESSAGES.invalidInput)).optional(),
+  pathname: z.preprocess(clean, z.string().max(2048, ERROR_MESSAGES.invalidInput)).optional(),
 });
