@@ -113,7 +113,18 @@ export function ContactForm() {
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    if (isSubmitting || values.requestType === "") {
+    const {
+      firstName,
+      lastName,
+      phone,
+      requestType,
+      reachability,
+      details,
+      gdprConsent,
+      honeypot,
+    } = values;
+
+    if (isSubmitting || requestType === "") {
       return;
     }
 
@@ -122,15 +133,15 @@ export function ContactForm() {
 
     startSubmitTransition(async () => {
       try {
-        const normalizedPhone = normalizePhone(values.phone);
+        const normalizedPhone = normalizePhone(phone);
         const result = await submitContactForm({
-          firstName: values.firstName,
-          lastName: values.lastName,
+          firstName,
+          lastName,
           countryCode: "+49",
-          phone: normalizedPhone.length > 0 ? normalizedPhone : values.phone.replace(/\D/g, ""),
-          message: buildMessage(values.requestType, values.reachability, values.details),
-          gdprConsent: values.gdprConsent,
-          honeypot: values.honeypot,
+          phone: normalizedPhone.length > 0 ? normalizedPhone : phone.replace(/\D/g, ""),
+          message: buildMessage(requestType, reachability, details),
+          gdprConsent,
+          honeypot,
         });
 
         if (result.success) {
