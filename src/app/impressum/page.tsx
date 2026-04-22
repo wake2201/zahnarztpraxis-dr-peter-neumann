@@ -1,11 +1,14 @@
 import Link from "next/link";
 import type { Metadata } from "next";
+import { publicContent } from "@/content/data";
 
 export const metadata: Metadata = {
-  title: "Impressum | Zahnarztpraxis Dr. Peter Neumann",
+  title: publicContent.metadata.impressum.title,
 };
 
 export default function ImpressumPage() {
+  const { legal, practice } = publicContent;
+
   return (
     <div className="min-h-screen bg-slate-50">
       {/* Header */}
@@ -15,14 +18,14 @@ export default function ImpressumPage() {
             href="/"
             className="inline-flex items-center text-sm font-medium text-primary hover:underline py-2 px-3 -ml-3 rounded-lg hover:bg-primary-50 transition-colors"
           >
-            &larr; Zurück zur Startseite
+            &larr; {legal.backToHomeLabel}
           </Link>
         </div>
       </header>
 
       <main className="max-w-4xl mx-auto px-4 sm:px-6 py-12 md:py-20">
         <h1 className="text-3xl sm:text-4xl font-bold text-slate-800 mb-8">
-          Impressum
+          {legal.impressumHeading}
         </h1>
 
         <div className="prose prose-slate max-w-none space-y-8">
@@ -31,26 +34,26 @@ export default function ImpressumPage() {
               Angaben gemäß § 5 TMG
             </h2>
             <p className="text-slate-600 leading-relaxed">
-              Zahnarztpraxis Dr. Peter Neumann
+              {practice.fullName}
               <br />
-              Platz der Deutschen Einheit 5<br />
-              06712 Zeitz
+              {practice.address.street}<br />
+              {practice.address.lineTwo}
             </p>
           </section>
 
           <section>
             <h2 className="text-xl font-semibold text-slate-800 mb-3">
-              Kontakt
+              {legal.contactHeading}
             </h2>
             <p className="text-slate-600 leading-relaxed">
-              Telefon: 03441 / 223786
+              Telefon: {practice.phone.display}
               <br />
               Website:{" "}
               <a
-                href="https://zahnarzt-neumann.vercel.app"
+                href={practice.website.href}
                 className="text-primary hover:underline"
               >
-                zahnarzt-neumann.vercel.app
+                {practice.website.label}
               </a>
             </p>
           </section>

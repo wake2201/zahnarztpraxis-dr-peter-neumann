@@ -12,6 +12,11 @@ import {
   Phone,
   Send,
 } from "lucide-react";
+import {
+  publicContent,
+  type ContactReachability,
+  type ContactRequestType,
+} from "@/content/data";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -20,15 +25,12 @@ import { cn } from "@/lib/utils";
 
 type FormStatus = "idle" | "success" | "error";
 
-type RequestType = "appointment" | "callback" | "prescription" | "other";
-type Reachability = "morning" | "afternoon" | "flexible";
-
 interface FormValues {
   firstName: string;
   lastName: string;
   phone: string;
-  requestType: RequestType | "";
-  reachability: Reachability | "";
+  requestType: ContactRequestType | "";
+  reachability: ContactReachability | "";
   details: string;
   gdprConsent: boolean;
   honeypot: string;
@@ -44,25 +46,6 @@ const INITIAL_VALUES: FormValues = {
   gdprConsent: false,
   honeypot: "",
 };
-
-const REQUEST_TYPE_OPTIONS: Array<{ value: RequestType; label: string }> = [
-  { value: "appointment", label: "Termin vereinbaren" },
-  { value: "callback", label: "Rückruf gewünscht" },
-  { value: "prescription", label: "Rezept / Überweisung" },
-  { value: "other", label: "Sonstiges" },
-];
-
-const REACHABILITY_OPTIONS: Array<{ value: Reachability; label: string }> = [
-  { value: "morning", label: "vormittags" },
-  { value: "afternoon", label: "nachmittags" },
-  { value: "flexible", label: "egal" },
-];
-
-const BENEFITS = [
-  "Unverbindlich",
-  "Schnelle Rückmeldung",
-  "Kein Konto erforderlich",
-] as const;
 
 const MAX_DETAILS_LENGTH = 1900;
 
@@ -85,12 +68,13 @@ function normalizePhone(phone: string) {
 }
 
 function buildMessage(
-  requestType: RequestType,
-  reachability: Reachability | "",
+  requestType: ContactRequestType,
+  reachability: ContactReachability | "",
   details: string,
 ) {
-  const requestTypeLabel = REQUEST_TYPE_OPTIONS.find((option) => option.value === requestType)?.label ?? "Sonstiges";
-  const reachabilityLabel = REACHABILITY_OPTIONS.find((option) => option.value === reachability)?.label ?? "";
+  const { contact } = publicContent;
+  const requestTypeLabel = contact.requestTypeOptions.find((option) => option.value === requestType)?.label ?? "Sonstiges";
+  const reachabilityLabel = contact.reachabilityOptions.find((option) => option.value === reachability)?.label ?? "";
   const trimmedDetails = details.trim();
 
   const segments = [`Anliegen: ${requestTypeLabel}.`];
@@ -110,6 +94,7 @@ export function ContactForm() {
   const ref = useRef<HTMLElement | null>(null);
   const isInView = useInView(ref, { once: true, margin: "-100px" });
   const [isSubmitting, startSubmitTransition] = useTransition();
+  const { contact, practice } = publicContent;
 
   const [formStatus, setFormStatus] = useState<FormStatus>("idle");
   const [errorMessage, setErrorMessage] = useState("");
@@ -155,10 +140,10 @@ export function ContactForm() {
         }
 
         setFormStatus("error");
-        setErrorMessage(result.error || "Ein Fehler ist aufgetreten.");
+        setErrorMessage(result.error || contact.defaultError);
       } catch {
         setFormStatus("error");
-        setErrorMessage("Ein unerwarteter Fehler ist aufgetreten. Bitte versuchen Sie es später erneut.");
+        setErrorMessage(contact.unexpectedError);
       }
     });
   }
@@ -173,32 +158,31 @@ export function ContactForm() {
             transition={{ duration: 0.6 }}
           >
             <span className="mb-4 inline-flex rounded-full bg-primary/10 px-4 py-1.5 text-sm font-medium text-primary">
-              Kontakt
+              {contact.eyebrow}
             </span>
             <h2 className="max-w-md text-3xl font-bold tracking-tight text-slate-800 sm:text-4xl">
-              Termine online anfragen
+              {contact.title}
             </h2>
             <p className="mt-5 max-w-xl text-base leading-7 text-slate-600 sm:text-lg">
-              Kein langes Warten am Telefon – senden Sie uns Ihre Anfrage bequem online.
-              Wir melden uns schnellstmöglich bei Ihnen zurück.
+              {contact.description}
             </p>
 
             <div className="mt-8 space-y-4">
-              <InfoCard icon={<Phone className="h-5 w-5 text-primary" />} label="Telefon">
+              <InfoCard icon={<Phone className="h-5 w-5 text-primary" />} label={contact.phoneLabel}>
                 <a
-                  href="tel:03441223786"
+                  href={practice.phone.href}
                   className="text-2xl font-bold tracking-tight text-slate-800 transition-colors hover:text-primary"
                 >
-                  03441 223786
+                  {practice.phone.display}
                 </a>
                 <p className="mt-1 text-sm text-slate-500">
-                  Während der Sprechzeiten erreichbar
+                  {practice.phone.availabilityLabel}
                 </p>
               </InfoCard>
 
-              <InfoCard icon={<MapPin className="h-5 w-5 text-primary" />} label="Adresse">
+              <InfoCard icon={<MapPin className="h-5 w-5 text-primary" />} label={contact.addressLabel}>
                 <address className="not-italic text-base font-semibold leading-7 text-slate-800">
-                  Platz der Deutschen Einheit 5, 06712 Zeitz
+                  {practice.address.singleLine}
                 </address>
               </InfoCard>
             </div>
@@ -215,11 +199,10 @@ export function ContactForm() {
                   <CheckCircle className="h-8 w-8 text-green-600" />
                 </div>
                 <h3 className="text-2xl font-bold text-green-900">
-                  Vielen Dank für Ihre Anfrage!
+                  {contact.successTitle}
                 </h3>
                 <p className="mx-auto mt-3 max-w-lg text-sm leading-7 text-green-700 sm:text-base">
-                  Wir haben Ihre Anfrage erhalten und melden uns in der Regel innerhalb
-                  von 24 Stunden bei Ihnen zurück.
+                  {contact.successDescription}
                 </p>
                 <Button
                   type="button"
@@ -228,7 +211,7 @@ export function ContactForm() {
                   className="mt-6 w-full sm:w-auto"
                   onClick={resetForm}
                 >
-                  Neue Anfrage senden
+                  {contact.successActionLabel}
                 </Button>
               </div>
             ) : (
@@ -251,7 +234,7 @@ export function ContactForm() {
                 </div>
 
                 <div className="grid gap-4 sm:grid-cols-2">
-                  <FormField label="Vorname" htmlFor="firstName" required>
+                  <FormField label={contact.firstNameLabel} htmlFor="firstName" required>
                     <Input
                       id="firstName"
                       name="firstName"
@@ -260,12 +243,12 @@ export function ContactForm() {
                       maxLength={50}
                       value={values.firstName}
                       onChange={(event) => updateField("firstName", event.target.value)}
-                      placeholder="Ihr Vorname"
+                      placeholder={contact.firstNamePlaceholder}
                       className="bg-white"
                     />
                   </FormField>
 
-                  <FormField label="Nachname" htmlFor="lastName" required>
+                  <FormField label={contact.lastNameLabel} htmlFor="lastName" required>
                     <Input
                       id="lastName"
                       name="lastName"
@@ -274,14 +257,14 @@ export function ContactForm() {
                       maxLength={50}
                       value={values.lastName}
                       onChange={(event) => updateField("lastName", event.target.value)}
-                      placeholder="Ihr Nachname"
+                      placeholder={contact.lastNamePlaceholder}
                       className="bg-white"
                     />
                   </FormField>
                 </div>
 
                 <div className="mt-4">
-                  <FormField label="Telefonnummer" htmlFor="phone" required>
+                  <FormField label={contact.phoneFieldLabel} htmlFor="phone" required>
                     <Input
                       id="phone"
                       name="phone"
@@ -292,27 +275,27 @@ export function ContactForm() {
                       maxLength={30}
                       value={values.phone}
                       onChange={(event) => updateField("phone", event.target.value)}
-                      placeholder="03441 223786"
+                      placeholder={contact.phonePlaceholder}
                       className="bg-white"
                     />
                   </FormField>
                 </div>
 
                 <div className="mt-4">
-                  <FormField label="Anliegen" htmlFor="requestType" required>
+                  <FormField label={contact.requestTypeLabel} htmlFor="requestType" required>
                     <div className="relative">
                       <select
                         id="requestType"
                         name="requestType"
                         required
                         value={values.requestType}
-                        onChange={(event) => updateField("requestType", event.target.value as RequestType | "")}
+                        onChange={(event) => updateField("requestType", event.target.value as ContactRequestType | "")}
                         className="flex h-11 w-full appearance-none rounded-xl border border-input bg-white px-4 py-2 pr-12 text-sm text-slate-700 ring-offset-background transition-all duration-200 focus-visible:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
                       >
                         <option value="" disabled>
-                          Bitte auswählen
+                          {contact.requestTypePlaceholder}
                         </option>
-                        {REQUEST_TYPE_OPTIONS.map((option) => (
+                        {contact.requestTypeOptions.map((option) => (
                           <option key={option.value} value={option.value}>
                             {option.label}
                           </option>
@@ -325,10 +308,10 @@ export function ContactForm() {
 
                 <fieldset className="mt-6">
                   <legend className="text-sm font-medium text-slate-700">
-                    Wann sind Sie erreichbar? <span className="text-slate-400">(optional)</span>
+                    {contact.reachabilityLegend} <span className="text-slate-400">{contact.optionalLabel}</span>
                   </legend>
                   <div className="mt-3 grid gap-3 sm:grid-cols-3">
-                    {REACHABILITY_OPTIONS.map((option) => {
+                    {contact.reachabilityOptions.map((option) => {
                       const isSelected = values.reachability === option.value;
 
                       return (
@@ -347,7 +330,7 @@ export function ContactForm() {
                             value={option.value}
                             checked={isSelected}
                             onChange={(event) =>
-                              updateField("reachability", event.target.value as Reachability)
+                              updateField("reachability", event.target.value as ContactReachability)
                             }
                             className="h-4 w-4 border-slate-300 text-primary focus:ring-primary"
                           />
@@ -360,9 +343,9 @@ export function ContactForm() {
 
                 <div className="mt-6">
                   <FormField
-                    label="Zusätzliche Informationen"
+                    label={contact.detailsLabel}
                     htmlFor="details"
-                    suffix="(optional)"
+                    suffix={contact.optionalLabel}
                   >
                     <Textarea
                       id="details"
@@ -370,7 +353,7 @@ export function ContactForm() {
                       maxLength={MAX_DETAILS_LENGTH}
                       value={values.details}
                       onChange={(event) => updateField("details", event.target.value)}
-                      placeholder="Beschreiben Sie kurz Ihr Anliegen…"
+                      placeholder={contact.detailsPlaceholder}
                       className="min-h-[144px] bg-white"
                     />
                   </FormField>
@@ -391,19 +374,19 @@ export function ContactForm() {
                   {isSubmitting ? (
                     <>
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Wird gesendet...
+                      {contact.submittingLabel}
                     </>
                   ) : (
                     <>
                       <Send className="mr-2 h-4 w-4" />
-                      Anfrage absenden
+                      {contact.submitLabel}
                     </>
                   )}
                 </Button>
 
                 <div className="mt-6 border-t border-slate-200 pt-6">
                   <div className="flex flex-wrap gap-x-5 gap-y-2">
-                    {BENEFITS.map((benefit) => (
+                    {contact.benefits.map((benefit) => (
                       <div key={benefit} className="flex items-center gap-2 text-sm font-medium text-slate-700">
                         <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary/10 text-primary">
                           <Check className="h-3.5 w-3.5" />
@@ -413,7 +396,7 @@ export function ContactForm() {
                     ))}
                   </div>
                   <p className="mt-4 text-sm leading-6 text-slate-500">
-                    Wir melden uns in der Regel innerhalb von 24 Stunden bei Ihnen.
+                    {contact.responseTimeNotice}
                   </p>
                   <label className="mt-4 flex items-start gap-3">
                     <input
@@ -424,12 +407,11 @@ export function ContactForm() {
                       className="mt-1 h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
                     />
                     <span className="text-sm leading-6 text-slate-600">
-                      Ich stimme zu, dass meine Angaben zur Bearbeitung meiner Anfrage gespeichert
-                      werden. Weitere Informationen in der{" "}
+                      {contact.gdprConsentPrefix}
                       <Link href="/datenschutz" className="font-medium text-primary hover:underline">
-                        Datenschutzerklärung
+                        {contact.gdprConsentLinkLabel}
                       </Link>
-                      .
+                      {contact.gdprConsentSuffix}
                     </span>
                   </label>
                 </div>

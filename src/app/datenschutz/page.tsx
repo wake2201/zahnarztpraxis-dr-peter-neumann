@@ -1,11 +1,14 @@
 import Link from "next/link";
 import type { Metadata } from "next";
+import { publicContent } from "@/content/data";
 
 export const metadata: Metadata = {
-  title: "Datenschutzerklärung | Zahnarztpraxis Dr. Peter Neumann",
+  title: publicContent.metadata.privacy.title,
 };
 
 export default function DatenschutzPage() {
+  const { legal, practice } = publicContent;
+
   return (
     <div className="min-h-screen bg-slate-50">
       <header className="bg-white border-b border-slate-100">
@@ -14,14 +17,14 @@ export default function DatenschutzPage() {
             href="/"
             className="inline-flex items-center text-sm font-medium text-primary hover:underline py-2 px-3 -ml-3 rounded-lg hover:bg-primary-50 transition-colors"
           >
-            &larr; Zurück zur Startseite
+            &larr; {legal.backToHomeLabel}
           </Link>
         </div>
       </header>
 
       <main className="max-w-4xl mx-auto px-4 sm:px-6 py-12 md:py-20">
         <h1 className="text-3xl sm:text-4xl font-bold text-slate-800 mb-8">
-          Datenschutzerklärung
+          {legal.privacyHeading}
         </h1>
 
         <div className="prose prose-slate max-w-none space-y-8">
@@ -32,12 +35,12 @@ export default function DatenschutzPage() {
             <p className="text-slate-600 leading-relaxed">
               Verantwortlich für die Datenverarbeitung auf dieser Website ist:
               <br />
-              Zahnarztpraxis Dr. Peter Neumann
+              {practice.fullName}
               <br />
-              Platz der Deutschen Einheit 5<br />
-              06712 Zeitz
+              {practice.address.street}<br />
+              {practice.address.lineTwo}
               <br />
-              Telefon: 03441 / 223786
+              Telefon: {practice.phone.display}
             </p>
           </section>
 

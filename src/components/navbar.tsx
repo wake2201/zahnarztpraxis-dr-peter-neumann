@@ -4,17 +4,12 @@ import { useState } from "react";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import { Menu, X, Phone } from "lucide-react";
+import { publicContent } from "@/content/data";
 import { Button } from "@/components/ui/button";
-
-const navLinks = [
-  { href: "#start", label: "Start" },
-  { href: "#ueber-uns", label: "Über uns" },
-  { href: "#sprechzeiten", label: "Sprechzeiten" },
-  { href: "#kontakt", label: "Kontakt" },
-];
 
 export function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const { navigation, practice } = publicContent;
 
   return (
     <motion.header
@@ -44,15 +39,15 @@ export function Navbar() {
             </div>
             <div className="hidden sm:block">
               <p className="text-sm font-bold text-slate-800 leading-tight">
-                Dr. Peter Neumann
+                {practice.doctorName}
               </p>
-              <p className="text-xs text-slate-500">Zahnarztpraxis Zeitz</p>
+              <p className="text-xs text-slate-500">{practice.locationLabel}</p>
             </div>
           </Link>
 
           {/* Desktop Navigation */}
           <nav className="hidden md:flex items-center gap-1">
-            {navLinks.map((link) => (
+            {navigation.links.map((link) => (
               <Link
                 key={link.href}
                 href={link.href}
@@ -66,14 +61,14 @@ export function Navbar() {
           {/* CTA Desktop */}
           <div className="hidden md:flex items-center gap-3">
             <a
-              href="tel:03441223786"
+              href={practice.phone.href}
               className="flex items-center gap-2 text-sm font-medium text-slate-600 hover:text-primary transition-colors"
             >
               <Phone className="w-4 h-4" />
-              03441 223786
+              {practice.phone.display}
             </a>
             <Button asChild size="sm">
-              <a href="#kontakt">Termin anfragen</a>
+              <a href="#kontakt">{navigation.contactButtonLabel}</a>
             </Button>
           </div>
 
@@ -81,7 +76,7 @@ export function Navbar() {
           <button
             onClick={() => setMobileOpen(!mobileOpen)}
             className="md:hidden p-2.5 min-w-[44px] min-h-[44px] rounded-lg text-slate-600 hover:bg-slate-100 transition-colors flex items-center justify-center"
-            aria-label="Menü öffnen"
+            aria-label={navigation.mobileMenuLabel}
           >
             {mobileOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
           </button>
@@ -98,7 +93,7 @@ export function Navbar() {
             className="md:hidden bg-white border-t border-slate-100 overflow-hidden"
           >
             <div className="px-4 py-4 space-y-2">
-              {navLinks.map((link) => (
+              {navigation.links.map((link) => (
                 <Link
                   key={link.href}
                   href={link.href}
@@ -110,15 +105,15 @@ export function Navbar() {
               ))}
               <div className="pt-2 flex flex-col gap-2">
                 <a
-                  href="tel:03441223786"
+                  href={practice.phone.href}
                   className="flex items-center justify-center gap-2 py-3 text-sm font-medium text-slate-600 hover:text-primary border border-slate-200 rounded-xl transition-colors"
                 >
                   <Phone className="w-4 h-4" />
-                  03441 223786
+                  {practice.phone.display}
                 </a>
                 <Button asChild className="w-full">
                   <a href="#kontakt" onClick={() => setMobileOpen(false)}>
-                    Termin anfragen
+                    {navigation.contactButtonLabel}
                   </a>
                 </Button>
               </div>

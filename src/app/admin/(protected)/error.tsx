@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { AlertTriangle, Loader2, Phone } from "lucide-react";
+import { publicContent } from "@/content/data";
 import { Button } from "@/components/ui/button";
 
 export default function AdminError({
@@ -15,6 +16,7 @@ export default function AdminError({
   const router = useRouter();
   const [retrying, setRetrying] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
+  const { admin, practice } = publicContent;
 
   function handleRetry() {
     setRetrying(true);
@@ -62,8 +64,8 @@ export default function AdminError({
             <p className="text-xs text-amber-700">
               Das System scheint vorübergehend nicht erreichbar zu sein.
             </p>
-            <a href="tel:03441223786" className="mt-2 inline-flex items-center text-xs text-primary font-semibold">
-              <Phone className="w-3 h-3 mr-1" /> 03441 223786
+            <a href={practice.phone.href} className="mt-2 inline-flex items-center text-xs text-primary font-semibold">
+              <Phone className="w-3 h-3 mr-1" /> {admin.errorPhoneCtaLabel}
             </a>
           </div>
         )}
@@ -71,4 +73,3 @@ export default function AdminError({
     </div>
   );
 }
-

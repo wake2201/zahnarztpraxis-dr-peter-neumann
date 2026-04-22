@@ -9,6 +9,7 @@ import {
   AlertCircle,
   Accessibility,
 } from "lucide-react";
+import { publicContent } from "@/content/data";
 
 const hours = [
   { day: "Montag", time: "08:00 – 13:00 & 14:00 – 18:00 Uhr" },
@@ -21,6 +22,7 @@ const hours = [
 export function Schedule() {
   const ref = useRef(null);
   const isInView = useInView(ref, { once: true, margin: "-100px" });
+  const { practice, schedule } = publicContent;
 
   return (
     <section
@@ -37,10 +39,10 @@ export function Schedule() {
           className="text-center mb-16"
         >
           <span className="inline-block px-4 py-1.5 bg-primary/10 text-primary rounded-full text-sm font-medium mb-4">
-            Sprechzeiten & Kontakt
+            {schedule.eyebrow}
           </span>
           <h2 className="text-3xl sm:text-4xl font-bold text-slate-800">
-            So erreichen Sie uns
+            {schedule.title}
           </h2>
         </motion.div>
 
@@ -95,17 +97,16 @@ export function Schedule() {
               <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center">
                 <Phone className="w-5 h-5 text-white" />
               </div>
-              <h3 className="text-xl font-bold">Telefon</h3>
+              <h3 className="text-xl font-bold">{schedule.phoneHeading}</h3>
             </div>
             <a
-              href="tel:03441223786"
+              href={practice.phone.href}
               className="text-2xl font-bold hover:underline transition-all"
             >
-              03441 223786
+              {practice.phone.display}
             </a>
             <p className="mt-3 text-white/80 text-sm">
-              Rufen Sie uns an oder nutzen Sie unser Kontaktformular weiter
-              unten.
+              {schedule.phoneDescription}
             </p>
           </motion.div>
 
@@ -120,15 +121,15 @@ export function Schedule() {
               <div className="w-10 h-10 bg-primary/10 rounded-xl flex items-center justify-center">
                 <MapPin className="w-5 h-5 text-primary" />
               </div>
-              <h3 className="text-xl font-bold text-slate-800">Anfahrt</h3>
+              <h3 className="text-xl font-bold text-slate-800">{schedule.addressHeading}</h3>
             </div>
             <address className="not-italic text-slate-600 leading-relaxed">
               <strong className="text-slate-800">
-                Zahnarztpraxis Dr. Peter Neumann
+                {practice.fullName}
               </strong>
               <br />
-              Platz der Deutschen Einheit 5<br />
-              06712 Zeitz
+              {practice.address.street}<br />
+              {practice.address.lineTwo}
             </address>
           </motion.div>
 
@@ -147,16 +148,15 @@ export function Schedule() {
                 <div className="flex items-center gap-2 mb-2">
                   <AlertCircle className="w-4 h-4 text-primary" />
                   <h4 className="font-bold text-slate-800">
-                    Wichtiger Hinweis
+                    {schedule.accessibilityTitle}
                   </h4>
                 </div>
                 <p className="text-slate-600 leading-relaxed">
-                  Unsere Praxis verfügt über einen eigenen, barrierefreien
-                  Eingang — diesen erreichen Sie am besten von der{" "}
+                  {schedule.accessibilityLead}
                   <strong className="text-slate-800">
-                    Dietrich-Bonhoeffer-Str.
-                  </strong>{" "}
-                  aus.
+                    {schedule.accessibilityStreet}
+                  </strong>
+                  {schedule.accessibilityTail}
                 </p>
               </div>
             </div>

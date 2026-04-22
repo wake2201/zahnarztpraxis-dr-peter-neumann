@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, type Page } from "@playwright/test";
 import {
   cleanupRateLimits,
   cleanupTestContactRequests,
@@ -8,6 +8,14 @@ import {
 
 // Chaos-Tests — prüfen Race-Conditions und Backend-Integrität.
 test.use({ viewport: { width: 1280, height: 720 } });
+
+async function dismissCookieBanner(page: Page) {
+  const banner = page.getByText("Cookie-Hinweis");
+  if (await banner.isVisible({ timeout: 3000 }).catch(() => false)) {
+    await page.getByRole("button", { name: "Verstanden" }).click();
+    await banner.waitFor({ state: "hidden", timeout: 5000 });
+  }
+}
 
 test.describe("Chaos & Integrity", () => {
   test.beforeEach(async () => {
@@ -24,12 +32,14 @@ test.describe("Chaos & Integrity", () => {
     const firstName = `Chaos-${Date.now()}`;
 
     await page.goto("/#kontakt");
+    await dismissCookieBanner(page);
+    await page.locator("#kontakt").scrollIntoViewIfNeeded();
 
     await page.getByLabel("Vorname").fill(firstName);
     await page.getByLabel("Nachname").fill("Monkey");
     await page.getByLabel("Telefonnummer").fill("1234567890");
-    await page.getByLabel("Ihr Anliegen").fill("Race-Condition Test");
-    await page.getByRole("checkbox").check();
+    await page.getByLabel("Anliegen").selectOption("other");
+    await page.getByLabel(/Ich stimme zu/i).check();
 
     const submitBtn = page.getByRole("button", { name: "Anfrage absenden" });
     await submitBtn.scrollIntoViewIfNeeded();
@@ -42,7 +52,7 @@ test.describe("Chaos & Integrity", () => {
 
     await expect(page.getByText("Vielen Dank für Ihre Anfrage!")).toBeVisible({ timeout: 10_000 });
 
-    // Bei aktiviertem Rate-Limit (MAX_REQUESTS=3/h) sollten keine Duplikate entstehen;
+    // Bei aktiviertem Rate-Limit sollten keine Duplikate entstehen;
     // aber mindestens ein Eintrag.
     const exists = await contactRequestExists(firstName);
     expect(exists).toBe(true);
@@ -52,22 +62,22 @@ test.describe("Chaos & Integrity", () => {
     const spamFirstName = "BypassAttempt";
 
     await page.goto("/#kontakt");
+    await dismissCookieBanner(page);
+    await page.locator("#kontakt").scrollIntoViewIfNeeded();
 
-    // sanitize entfernt <p></p> → leerer String → Zod min(1) schlägt fehl
+    // sanitize entfernt <p></p> -> leerer String -> Zod min(1) schlägt fehl
     await page.getByLabel("Vorname").fill("<p></p>");
     await page.getByLabel("Nachname").fill(spamFirstName);
     await page.getByLabel("Telefonnummer").fill("1234567890");
-    await page.getByLabel("Ihr Anliegen").fill("Bypass-Test");
-    await page.getByRole("checkbox").check();
+    await page.getByLabel("Anliegen").selectOption("other");
+    await page.getByLabel(/Ich stimme zu/i).check();
 
     const submitBtn = page.getByRole("button", { name: "Anfrage absenden" });
     await submitBtn.scrollIntoViewIfNeeded();
     await submitBtn.click();
 
-    // Fehlermeldung erwartet
     await expect(page.getByText("Vorname ist erforderlich.")).toBeVisible({ timeout: 10_000 });
 
-    // Kein DB-Eintrag
     const exists = await contactRequestExists(spamFirstName);
     expect(exists).toBe(false);
   });

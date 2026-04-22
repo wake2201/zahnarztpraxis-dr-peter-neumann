@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import { headers } from "next/headers";
+import { publicContent } from "@/content/data";
 import "@/styles/globals.css";
 
 // DSGVO: next/font/google lädt Fonts beim BUILD und self-hostet sie.
@@ -12,24 +13,15 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "Zahnarztpraxis Dr. Peter Neumann | Zeitz",
-  description:
-    "Ihre Zahngesundheit in besten Händen. Zahnarztpraxis Dr. Peter Neumann in Zeitz — vertrauensvolle Beratung und individuelle Leistungen für Ihr strahlendes Lächeln.",
-  keywords: [
-    "Zahnarzt",
-    "Zeitz",
-    "Dr. Peter Neumann",
-    "Zahnarztpraxis",
-    "Zahngesundheit",
-    "Sachsen-Anhalt",
-  ],
+  title: publicContent.metadata.root.title,
+  description: publicContent.metadata.root.description,
+  keywords: [...publicContent.metadata.root.keywords],
   openGraph: {
-    title: "Zahnarztpraxis Dr. Peter Neumann | Zeitz",
-    description:
-      "Vertrauensvolle Beratung und individuelle Leistungen für Ihr strahlendes Lächeln.",
+    title: publicContent.metadata.root.openGraphTitle,
+    description: publicContent.metadata.root.openGraphDescription,
     type: "website",
     locale: "de_DE",
-    url: "https://zahnarzt-neumann.vercel.app",
+    url: publicContent.metadata.root.openGraphUrl,
   },
 };
 

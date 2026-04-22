@@ -2,6 +2,7 @@
 
 import { motion } from "framer-motion";
 import { Phone, CalendarCheck, Accessibility, Heart } from "lucide-react";
+import { publicContent } from "@/content/data";
 import { Button } from "@/components/ui/button";
 
 const badges = [
@@ -11,6 +12,8 @@ const badges = [
 ];
 
 export function Hero() {
+  const { hero, navigation, practice } = publicContent;
+
   return (
     <section
       id="start"
@@ -37,7 +40,7 @@ export function Hero() {
               className="inline-flex items-center gap-2 px-4 py-2 bg-primary/10 text-primary rounded-full text-sm font-medium mb-6"
             >
               <span className="w-2 h-2 bg-primary rounded-full animate-pulse" />
-              Zahnarztpraxis in Zeitz
+              {hero.eyebrow}
             </motion.div>
 
             <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-slate-800 leading-tight tracking-tight">
@@ -61,7 +64,7 @@ export function Hero() {
               <Button asChild size="lg" className="w-full sm:min-w-[200px] h-12 text-base">
                 <a href="#kontakt">
                   <CalendarCheck className="w-4 h-4 mr-2" />
-                  Termin anfragen
+                  {navigation.contactButtonLabel}
                 </a>
               </Button>
               <Button
@@ -70,9 +73,9 @@ export function Hero() {
                 size="lg"
                 className="w-full sm:min-w-[200px] h-12 text-base"
               >
-                <a href="tel:03441223786">
+                <a href={practice.phone.href}>
                   <Phone className="w-4 h-4 mr-2" />
-                  03441 223786 anrufen
+                  {hero.callButtonLabel}
                 </a>
               </Button>
             </motion.div>
@@ -112,10 +115,10 @@ export function Hero() {
                   </div>
                   <div>
                     <h3 className="text-lg font-bold text-slate-800">
-                      Dr. Peter Neumann
+                      {practice.doctorName}
                     </h3>
                     <p className="text-sm text-slate-500">
-                      Zahnarzt &bull; Zeitz
+                      {hero.profileRoleLabel}
                     </p>
                   </div>
                 </div>

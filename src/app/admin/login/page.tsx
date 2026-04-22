@@ -5,6 +5,7 @@ import { signIn } from "next-auth/react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Loader2, Lock, Heart, Eye, EyeOff } from "lucide-react";
+import { publicContent } from "@/content/data";
 
 export default function AdminLoginPage() {
   const [email, setEmail] = useState("");
@@ -12,6 +13,7 @@ export default function AdminLoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const { admin } = publicContent;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -58,7 +60,7 @@ export default function AdminLoginPage() {
             Admin-Bereich
           </h1>
           <p className="text-sm text-slate-500 mt-1">
-            Zahnarztpraxis Dr. Peter Neumann
+            {admin.loginSubtitle}
           </p>
         </div>
 

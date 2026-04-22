@@ -35,12 +35,13 @@ Eine DSGVO-konforme Marketing-Website mit rollenbasiertem Admin-Panel für die *
 | **DSGVO-Status**  | Vollständig konform — keine externen Dienste, kein Tracking       |
 | **Hosting**       | Aktuell Vercel (Migration auf Self-Hosted mit Nginx/PM2 möglich)  |
 
-### Praxis-Daten (hardcoded in Komponenten)
+### Praxis-Daten (zentral in `src/content/data.ts`)
 
 - **Name:** Dr. Peter Neumann
 - **Adresse:** Platz der Deutschen Einheit 5, 06712 Zeitz
 - **Telefon:** 03441 223786
 - **Admin-E-Mail:** admin@zeitzer-zahnarzt.de
+- **Single Source of Truth:** `src/content/data.ts` versorgt öffentliche Komponenten, Rechtstexte und Metadaten
 
 ### Tech-Stack
 
@@ -1012,10 +1013,10 @@ npm run dev
 ### Häufige Aufgaben
 
 **🔧 Praxis-Telefonnummer ändern:**
-Suche `03441 223786` / `03441223786` in: `navbar.tsx`, `schedule.tsx`, `contact-form.tsx`, `footer.tsx`, `impressum/page.tsx`, `datenschutz/page.tsx`
+`src/content/data.ts` — `practice.phone.display` und `practice.phone.href`
 
 **🏠 Praxis-Adresse ändern:**
-Suche `Platz der Deutschen Einheit 5` in denselben Dateien.
+`src/content/data.ts` — `practice.address`
 
 **🕐 Öffnungszeiten ändern:**
 `src/components/schedule.tsx` — Zeiten sind String-Literale im JSX.
