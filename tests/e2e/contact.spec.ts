@@ -1,4 +1,4 @@
-import { test, expect, Page } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import {
   cleanupRateLimits,
   cleanupTestContactRequests,
@@ -9,12 +9,12 @@ import {
 const TEST_FIRST_NAME = "E2E-Test";
 const TEST_LAST_NAME = "Playwright";
 
-// Kontaktformular-Tests prüfen Backend-Logik (Validierung, Honeypot, DB) —
-// nur Desktop nötig, da die Server-Actions viewport-unabhängig sind.
+// Kontaktformular-Tests prüfen Backend-Logik (Validierung, Honeypot, DB)
+// nur Desktop nötig, da die Server-Action viewport-unabhängig ist.
 // Vermeidet außerdem Rate-Limit-Konflikte (max. 3 Requests/Minute).
 test.use({ viewport: { width: 1280, height: 720 } });
 
-/** Cookie-Banner schließen und warten bis es komplett verschwunden ist */
+/** Cookie-Banner schließen und warten, bis es komplett verschwunden ist. */
 async function dismissCookieBanner(page: Page) {
   const banner = page.getByText("Cookie-Hinweis");
   if (await banner.isVisible({ timeout: 3000 }).catch(() => false)) {
@@ -38,29 +38,24 @@ test.describe("Kontaktformular", () => {
     await page.goto("/");
     await dismissCookieBanner(page);
 
-    // Zum Kontaktbereich scrollen
     await page.locator("#kontakt").scrollIntoViewIfNeeded();
 
-    // Formularfelder ausfüllen
     await page.getByLabel("Vorname").fill(TEST_FIRST_NAME);
     await page.getByLabel("Nachname").fill(TEST_LAST_NAME);
-    await page.getByLabel("Telefonnummer").fill("123456789");
-    await page.getByLabel("Ihr Anliegen").fill("E2E-Testanfrage — bitte ignorieren.");
+    await page.getByLabel("Telefonnummer").fill("03441 223786");
+    await page.getByLabel("Anliegen").selectOption("appointment");
+    await page.getByRole("radio", { name: "vormittags" }).check();
+    await page
+      .getByLabel("Zusätzliche Informationen (optional)")
+      .fill("E2E-Testanfrage – bitte ignorieren.");
+    await page.getByLabel(/Ich stimme zu/i).check();
 
-    // DSGVO-Checkbox aktivieren
-    await page.getByRole("checkbox").check();
+    const submitButton = page.getByRole("button", { name: "Anfrage absenden" });
+    await submitButton.scrollIntoViewIfNeeded();
+    await submitButton.click();
 
-    // Submit-Button in den sichtbaren Bereich scrollen und klicken
-    const submitBtn = page.getByRole("button", { name: "Anfrage absenden" });
-    await submitBtn.scrollIntoViewIfNeeded();
-    await submitBtn.click();
+    await expect(page.getByText("Vielen Dank für Ihre Anfrage!")).toBeVisible({ timeout: 10_000 });
 
-    // Erfolgsmeldung prüfen
-    await expect(
-      page.getByText("Vielen Dank für Ihre Anfrage!")
-    ).toBeVisible({ timeout: 10_000 });
-
-    // Prüfen, dass der Eintrag in der DB existiert
     const exists = await contactRequestExists(TEST_FIRST_NAME);
     expect(exists).toBe(true);
   });
@@ -73,37 +68,37 @@ test.describe("Kontaktformular", () => {
 
     const honeypotFirstName = "E2E-Test-Honeypot";
 
-    // Formularfelder ausfüllen
     await page.getByLabel("Vorname").fill(honeypotFirstName);
     await page.getByLabel("Nachname").fill("Spambot");
     await page.getByLabel("Telefonnummer").fill("000000000");
-    await page.getByLabel("Ihr Anliegen").fill("Spam-Test");
+    await page.getByLabel("Anliegen").selectOption("other");
+    await page
+      .getByLabel("Zusätzliche Informationen (optional)")
+      .fill("Spam-Test");
+    await page.getByLabel(/Ich stimme zu/i).check();
 
-    // DSGVO-Checkbox aktivieren
-    await page.getByRole("checkbox").check();
-
-    // Honeypot-Feld per JS befüllen (unsichtbar im DOM)
-    // React controlled inputs: nativen value-setter + input+change Events
-    await page.locator("#website").evaluate((el: HTMLInputElement) => {
+    // React-controlled Input: nativen value-setter + input/change Events auslösen.
+    await page.locator("#website").evaluate((element: HTMLInputElement) => {
       const nativeSetter = Object.getOwnPropertyDescriptor(
-        window.HTMLInputElement.prototype, "value"
-      )!.set!;
-      nativeSetter.call(el, "https://spam.example.com");
-      el.dispatchEvent(new Event("input", { bubbles: true }));
-      el.dispatchEvent(new Event("change", { bubbles: true }));
+        window.HTMLInputElement.prototype,
+        "value",
+      )?.set;
+
+      if (!nativeSetter) {
+        throw new Error("Kein nativer Setter für Honeypot gefunden.");
+      }
+
+      nativeSetter.call(element, "https://spam.example.com");
+      element.dispatchEvent(new Event("input", { bubbles: true }));
+      element.dispatchEvent(new Event("change", { bubbles: true }));
     });
 
-    // Submit-Button scrollen und klicken
-    const submitBtn = page.getByRole("button", { name: "Anfrage absenden" });
-    await submitBtn.scrollIntoViewIfNeeded();
-    await submitBtn.click();
+    const submitButton = page.getByRole("button", { name: "Anfrage absenden" });
+    await submitButton.scrollIntoViewIfNeeded();
+    await submitButton.click();
 
-    // UI zeigt trotzdem "Erfolg" (um Spammer nicht zu informieren)
-    await expect(
-      page.getByText("Vielen Dank für Ihre Anfrage!")
-    ).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText("Vielen Dank für Ihre Anfrage!")).toBeVisible({ timeout: 10_000 });
 
-    // Aber: Eintrag darf NICHT in der DB sein
     const exists = await contactRequestExists(honeypotFirstName);
     expect(exists).toBe(false);
   });
