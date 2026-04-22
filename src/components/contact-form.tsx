@@ -21,6 +21,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { submitContactForm } from "@/lib/actions";
+import { EUROPEAN_COUNTRY_CODES } from "@/lib/country-codes";
 import { cn } from "@/lib/utils";
 
 type FormStatus = "idle" | "success" | "error";
@@ -28,6 +29,7 @@ type FormStatus = "idle" | "success" | "error";
 interface FormValues {
   firstName: string;
   lastName: string;
+  countryCode: (typeof EUROPEAN_COUNTRY_CODES)[number]["code"];
   phone: string;
   requestType: ContactRequestType | "";
   reachability: ContactReachability | "";
@@ -39,6 +41,7 @@ interface FormValues {
 const INITIAL_VALUES: FormValues = {
   firstName: "",
   lastName: "",
+  countryCode: "+49",
   phone: "",
   requestType: "",
   reachability: "",
@@ -116,6 +119,7 @@ export function ContactForm() {
     const {
       firstName,
       lastName,
+      countryCode,
       phone,
       requestType,
       reachability,
@@ -137,7 +141,7 @@ export function ContactForm() {
         const result = await submitContactForm({
           firstName,
           lastName,
-          countryCode: "+49",
+          countryCode,
           phone: normalizedPhone.length > 0 ? normalizedPhone : phone.replace(/\D/g, ""),
           message: buildMessage(requestType, reachability, details),
           gdprConsent,
@@ -276,19 +280,37 @@ export function ContactForm() {
 
                 <div className="mt-4">
                   <FormField label={contact.phoneFieldLabel} htmlFor="phone" required>
-                    <Input
-                      id="phone"
-                      name="phone"
-                      type="tel"
-                      required
-                      autoComplete="tel"
-                      inputMode="tel"
-                      maxLength={30}
-                      value={values.phone}
-                      onChange={(event) => updateField("phone", event.target.value)}
-                      placeholder={contact.phonePlaceholder}
-                      className="bg-white"
-                    />
+                    <div className="flex gap-3">
+                      <div className="relative w-28 flex-shrink-0">
+                        <select
+                          aria-label="Ländervorwahl"
+                          value={values.countryCode}
+                          onChange={(event) => updateField("countryCode", event.target.value as FormValues["countryCode"])}
+                          className="flex h-11 w-full appearance-none rounded-xl border border-input bg-white px-4 py-2 pr-9 text-sm text-slate-700 ring-offset-background transition-all duration-200 focus-visible:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                        >
+                          {EUROPEAN_COUNTRY_CODES.map((option) => (
+                            <option key={`${option.country}-${option.code}`} value={option.code}>
+                              {option.country} {option.code}
+                            </option>
+                          ))}
+                        </select>
+                        <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                      </div>
+                      <Input
+                        id="phone"
+                        name="phone"
+                        type="tel"
+                        required
+                        autoComplete="tel-national"
+                        inputMode="numeric"
+                        pattern="[0-9]*"
+                        maxLength={20}
+                        value={values.phone}
+                        onChange={(event) => updateField("phone", event.target.value.replace(/\D/g, ""))}
+                        placeholder={contact.phonePlaceholder}
+                        className="bg-white"
+                      />
+                    </div>
                   </FormField>
                 </div>
 

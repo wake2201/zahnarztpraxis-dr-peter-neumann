@@ -175,6 +175,13 @@ export async function contactRequestExists(firstName: string): Promise<boolean> 
   return count > 0;
 }
 
+export async function findLatestContactRequestByFirstName(firstName: string) {
+  return prisma.contactRequest.findFirst({
+    where: { firstName },
+    orderBy: { createdAt: "desc" },
+  });
+}
+
 export async function snapshotAuditLogs(): Promise<AuditLogSnapshotEntry[]> {
   return prisma.auditLog.findMany({
     orderBy: { createdAt: "asc" },

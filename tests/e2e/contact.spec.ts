@@ -4,9 +4,9 @@ import {
   cleanupTestContactRequests,
   contactRequestExists,
   disconnectPrisma,
+  findLatestContactRequestByFirstName,
 } from "./helpers/db-cleanup";
 
-const TEST_FIRST_NAME = "E2E-Test";
 const TEST_LAST_NAME = "Playwright";
 
 // Kontaktformular-Tests prüfen Backend-Logik (Validierung, Honeypot, DB)
@@ -35,14 +35,19 @@ test.describe("Kontaktformular", () => {
   });
 
   test("Formular erfolgreich absenden", async ({ page }) => {
+    const firstName = `E2E-Test-${Date.now()}`;
+
     await page.goto("/");
     await dismissCookieBanner(page);
 
     await page.locator("#kontakt").scrollIntoViewIfNeeded();
 
-    await page.getByLabel("Vorname").fill(TEST_FIRST_NAME);
+    await page.getByLabel("Vorname").fill(firstName);
     await page.getByLabel("Nachname").fill(TEST_LAST_NAME);
-    await page.getByLabel("Telefonnummer").fill("03441 223786");
+    await page.getByLabel("Ländervorwahl").selectOption("+43");
+    const phoneInput = page.getByLabel("Telefonnummer");
+    await phoneInput.type("98a76 54321");
+    await expect(phoneInput).toHaveValue("987654321");
     await page.getByLabel("Anliegen").selectOption("appointment");
     await page.getByRole("radio", { name: "vormittags" }).check();
     await page
@@ -56,8 +61,12 @@ test.describe("Kontaktformular", () => {
 
     await expect(page.getByText("Vielen Dank für Ihre Anfrage!")).toBeVisible({ timeout: 10_000 });
 
-    const exists = await contactRequestExists(TEST_FIRST_NAME);
+    const exists = await contactRequestExists(firstName);
     expect(exists).toBe(true);
+
+    const savedRequest = await findLatestContactRequestByFirstName(firstName);
+    expect(savedRequest?.countryCode).toBe("+43");
+    expect(savedRequest?.phone).toBe("987654321");
   });
 
   test("Honeypot blockiert Spam-Einträge", async ({ page }) => {
