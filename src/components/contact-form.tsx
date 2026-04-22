@@ -171,53 +171,36 @@ export function ContactForm() {
             initial={{ opacity: 0, y: 30 }}
             animate={isInView ? { opacity: 1, y: 0 } : {}}
             transition={{ duration: 0.6 }}
-            className="relative overflow-hidden rounded-[2rem] bg-slate-900 px-6 py-8 text-white shadow-card sm:px-8 sm:py-10"
           >
-            <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,_rgba(79,160,206,0.32),_transparent_45%)]" />
-            <div className="absolute -right-16 top-24 h-44 w-44 rounded-full border border-white/10" />
-            <div className="absolute bottom-6 right-6 h-24 w-24 rounded-full bg-white/5 blur-2xl" />
+            <span className="mb-4 inline-flex rounded-full bg-primary/10 px-4 py-1.5 text-sm font-medium text-primary">
+              Kontakt
+            </span>
+            <h2 className="max-w-md text-3xl font-bold tracking-tight text-slate-800 sm:text-4xl">
+              Termine online anfragen
+            </h2>
+            <p className="mt-5 max-w-xl text-base leading-7 text-slate-600 sm:text-lg">
+              Kein langes Warten am Telefon – senden Sie uns Ihre Anfrage bequem online.
+              Wir melden uns schnellstmöglich bei Ihnen zurück.
+            </p>
 
-            <div className="relative">
-              <span className="mb-4 inline-flex rounded-full border border-white/15 bg-white/10 px-4 py-1.5 text-sm font-medium text-white/90">
-                Kontakt
-              </span>
-              <h2 className="max-w-md text-3xl font-bold tracking-tight text-white sm:text-4xl">
-                Termine online anfragen
-              </h2>
-              <p className="mt-5 max-w-xl text-base leading-7 text-slate-200 sm:text-lg">
-                Kein langes Warten am Telefon – senden Sie uns Ihre Anfrage bequem online.
-                Wir melden uns schnellstmöglich bei Ihnen zurück.
-              </p>
-
-              <div className="mt-8 space-y-4">
-                <InfoCard
-                  icon={<Phone className="h-5 w-5 text-primary-200" />}
-                  label="Telefon"
-                  cardClassName="border-white/10 bg-white/10"
-                  labelClassName="text-white/70"
+            <div className="mt-8 space-y-4">
+              <InfoCard icon={<Phone className="h-5 w-5 text-primary" />} label="Telefon">
+                <a
+                  href="tel:03441223786"
+                  className="text-2xl font-bold tracking-tight text-slate-800 transition-colors hover:text-primary"
                 >
-                  <a
-                    href="tel:03441223786"
-                    className="text-2xl font-bold tracking-tight text-white transition-colors hover:text-primary-100"
-                  >
-                    03441 223786
-                  </a>
-                  <p className="mt-1 text-sm text-white/70">
-                    Während der Sprechzeiten erreichbar
-                  </p>
-                </InfoCard>
+                  03441 223786
+                </a>
+                <p className="mt-1 text-sm text-slate-500">
+                  Während der Sprechzeiten erreichbar
+                </p>
+              </InfoCard>
 
-                <InfoCard
-                  icon={<MapPin className="h-5 w-5 text-primary-200" />}
-                  label="Adresse"
-                  cardClassName="border-white/10 bg-white/5"
-                  labelClassName="text-white/70"
-                >
-                  <address className="not-italic text-base font-semibold leading-7 text-white">
-                    Platz der Deutschen Einheit 5, 06712 Zeitz
-                  </address>
-                </InfoCard>
-              </div>
+              <InfoCard icon={<MapPin className="h-5 w-5 text-primary" />} label="Adresse">
+                <address className="not-italic text-base font-semibold leading-7 text-slate-800">
+                  Platz der Deutschen Einheit 5, 06712 Zeitz
+                </address>
+              </InfoCard>
             </div>
           </motion.div>
 
@@ -487,28 +470,19 @@ function InfoCard({
   icon,
   label,
   children,
-  cardClassName,
-  labelClassName,
 }: {
   icon: ReactNode;
   label: string;
   children: ReactNode;
-  cardClassName?: string;
-  labelClassName?: string;
 }) {
   return (
-    <div
-      className={cn(
-        "rounded-2xl border px-5 py-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] backdrop-blur-sm",
-        cardClassName,
-      )}
-    >
+    <div className="rounded-2xl border border-slate-100 bg-slate-50 px-5 py-4">
       <div className="flex items-start gap-4">
-        <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl bg-white/10">
+        <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl bg-primary/10">
           {icon}
         </div>
         <div>
-          <p className={cn("text-sm", labelClassName)}>{label}</p>
+          <p className="text-sm text-slate-500">{label}</p>
           <div className="mt-1">{children}</div>
         </div>
       </div>
