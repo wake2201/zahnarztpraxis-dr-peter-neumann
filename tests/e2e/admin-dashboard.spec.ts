@@ -302,13 +302,20 @@ test.describe("Admin Dashboard", () => {
     await firstRow.getByRole("checkbox").check();
     await secondRow.getByRole("checkbox").check();
     await expect(page.getByTestId("request-selection-count")).toHaveText("2 ausgewählt");
+    const bulkActions = page.getByTestId("request-bulk-actions");
+    const baselineBulkActionsBox = await bulkActions.boundingBox();
+    const baselineBulkReadButtonBox = await bulkActions.getByRole("button", { name: /^Als gelesen$/i }).boundingBox();
+    const baselineBulkUnreadButtonBox = await bulkActions.getByRole("button", { name: /^Als ungelesen$/i }).boundingBox();
 
     const delayedReadAction = await delayNextServerAction(page);
     try {
       await page.getByRole("button", { name: /Als gelesen/i }).click();
 
-      await expect(page.getByRole("button", { name: /Wird aktualisiert/i }).first()).toBeVisible({ timeout: 10_000 });
-      await expect(page.getByRole("button", { name: /^Als ungelesen$/i })).toBeVisible();
+      const pendingBulkReadButton = bulkActions.getByRole("button", { name: /Wird aktualisiert/i });
+      await expect(pendingBulkReadButton).toBeVisible({ timeout: 10_000 });
+      expectStableBoundingBox(await bulkActions.boundingBox(), baselineBulkActionsBox);
+      expectStableBoundingBox(await pendingBulkReadButton.boundingBox(), baselineBulkReadButtonBox);
+      await expect(bulkActions.getByRole("button", { name: /^Als ungelesen$/i })).toBeVisible();
       expect(delayedReadAction.wasIntercepted()).toBe(true);
       expect(await getContactRequestReadState(firstRequest.id)).toBe(false);
       expect(await getContactRequestReadState(secondRequest.id)).toBe(false);
@@ -331,8 +338,11 @@ test.describe("Admin Dashboard", () => {
     try {
       await page.getByRole("button", { name: /Als ungelesen/i }).click();
 
-      await expect(page.getByRole("button", { name: /Wird aktualisiert/i }).first()).toBeVisible({ timeout: 10_000 });
-      await expect(page.getByRole("button", { name: /^Als gelesen$/i })).toBeVisible();
+      const pendingBulkUnreadButton = bulkActions.getByRole("button", { name: /Wird aktualisiert/i });
+      await expect(pendingBulkUnreadButton).toBeVisible({ timeout: 10_000 });
+      expectStableBoundingBox(await bulkActions.boundingBox(), baselineBulkActionsBox);
+      expectStableBoundingBox(await pendingBulkUnreadButton.boundingBox(), baselineBulkUnreadButtonBox);
+      await expect(bulkActions.getByRole("button", { name: /^Als gelesen$/i })).toBeVisible();
       expect(delayedUnreadAction.wasIntercepted()).toBe(true);
       expect(await getContactRequestReadState(firstRequest.id)).toBe(true);
       expect(await getContactRequestReadState(secondRequest.id)).toBe(true);

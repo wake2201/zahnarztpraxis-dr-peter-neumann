@@ -19,6 +19,7 @@ import type { ContactRequest } from "./types";
 
 type RequestMutationAction = "markRead" | "markUnread" | "delete";
 type MutationSource = "single" | "bulk";
+type DeletePhase = "idle" | "confirming" | "pending";
 
 interface RequestMutation {
   action: RequestMutationAction;
@@ -53,6 +54,10 @@ function fallbackErrorMessage(action: RequestMutationAction) {
     : "Status konnte nicht aktualisiert werden.";
 }
 
+function haveMatchingIds(currentIds: string[], targetIds: string[]) {
+  return currentIds.length === targetIds.length && currentIds.every((id) => targetIds.includes(id));
+}
+
 export function RequestsTab({ requests, onRequestsChange }: Props) {
   const router = useRouter();
   const [, startRequestTransition] = useTransition();
@@ -85,10 +90,36 @@ export function RequestsTab({ requests, onRequestsChange }: Props) {
   const selectedCount = selectedIds.length;
   const allVisibleSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedIds.includes(id));
   const someVisibleSelected = visibleIds.some((id) => selectedIds.includes(id));
-  const bulkDeleteConfirmation = deleteConfirmation?.source === "bulk";
   const isBulkReadPending = pendingMutationSource === "bulk" && pendingMutation?.action === "markRead";
   const isBulkUnreadPending = pendingMutationSource === "bulk" && pendingMutation?.action === "markUnread";
-  const isBulkDeletePending = pendingMutationSource === "bulk" && pendingMutation?.action === "delete";
+  const bulkDeleteIds = deleteConfirmation?.source === "bulk" ? deleteConfirmation.ids : selectedIds;
+
+  function getDeletePhase(source: MutationSource, ids: string[]): DeletePhase {
+    if (ids.length === 0) {
+      return "idle";
+    }
+
+    if (
+      pendingMutationSource === source &&
+      pendingMutation?.action === "delete" &&
+      haveMatchingIds(pendingMutation.ids, ids)
+    ) {
+      return "pending";
+    }
+
+    if (
+      !deleteConfirmation ||
+      deleteConfirmation.source !== source ||
+      !haveMatchingIds(deleteConfirmation.ids, ids)
+    ) {
+      return "idle";
+    }
+
+    return "confirming";
+  }
+
+  const bulkDeletePhase = getDeletePhase("bulk", bulkDeleteIds);
+  const isBulkDeletePending = bulkDeletePhase === "pending";
 
   function handleSelectAll() {
     setRequestActionError("");
@@ -171,13 +202,13 @@ export function RequestsTab({ requests, onRequestsChange }: Props) {
     handleMutation({ action: "delete", ids }, source);
   }
 
-  function handleStartBulkDelete() {
-    if (selectedCount === 0 || pendingMutation) {
+  function startDeleteConfirmation(ids: string[], source: MutationSource) {
+    if (ids.length === 0 || pendingMutation) {
       return;
     }
 
     setRequestActionError("");
-    setDeleteConfirmation({ ids: selectedIds, source: "bulk" });
+    setDeleteConfirmation({ ids, source });
   }
 
   return (
@@ -213,73 +244,83 @@ export function RequestsTab({ requests, onRequestsChange }: Props) {
                 data-testid="request-bulk-actions"
                 className="w-full sm:w-[34rem]"
               >
-                {bulkDeleteConfirmation ? (
-                  <div className="grid w-full gap-2 sm:grid-cols-3">
-                    <div aria-hidden="true" className="hidden h-9 sm:block" />
-                    <Button
-                      variant="destructive"
-                      size="sm"
-                      onClick={() => handleDelete(deleteConfirmation?.source === "bulk" ? deleteConfirmation.ids : [], "bulk")}
-                      disabled={Boolean(pendingMutation)}
-                      className="h-9 w-full px-3 text-sm transition-none sm:col-start-3 sm:row-start-1"
-                    >
-                      {isBulkDeletePending ? (
-                        <>
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                          <span className="ml-1.5">Wird gelöscht...</span>
-                        </>
-                      ) : (
-                        <>
-                          <AlertTriangle className="w-4 h-4" />
-                          <span className="ml-1.5">Auswahl endgültig löschen</span>
-                        </>
-                      )}
-                    </Button>
-                    {!isBulkDeletePending && (
+                <div className="grid w-full gap-2 sm:grid-cols-3">
+                  <div className="w-full">
+                    {bulkDeletePhase === "idle" ? (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleMutation({ action: "markRead", ids: selectedIds }, "bulk")}
+                        disabled={selectedCount === 0 || Boolean(pendingMutation)}
+                        className="h-9 w-full px-3 text-sm"
+                      >
+                        {isBulkReadPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Eye className="w-4 h-4" />}
+                        <span className="ml-1.5">{isBulkReadPending ? "Wird aktualisiert..." : "Als gelesen"}</span>
+                      </Button>
+                    ) : (
+                      <div aria-hidden="true" className="hidden h-9 sm:block" />
+                    )}
+                  </div>
+                  <div className="w-full">
+                    {bulkDeletePhase === "idle" ? (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleMutation({ action: "markUnread", ids: selectedIds }, "bulk")}
+                        disabled={selectedCount === 0 || Boolean(pendingMutation)}
+                        className="h-9 w-full px-3 text-sm"
+                      >
+                        {isBulkUnreadPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <EyeOff className="w-4 h-4" />}
+                        <span className="ml-1.5">{isBulkUnreadPending ? "Wird aktualisiert..." : "Als ungelesen"}</span>
+                      </Button>
+                    ) : bulkDeletePhase === "confirming" ? (
                       <Button
                         variant="outline"
                         size="sm"
                         onClick={() => setDeleteConfirmation(null)}
-                        className="h-9 w-full px-3 text-sm transition-none sm:col-start-2 sm:row-start-1"
+                        className="h-9 w-full px-3 text-sm transition-none"
                       >
                         Abbrechen
                       </Button>
+                    ) : (
+                      <div aria-hidden="true" className="hidden h-9 sm:block" />
                     )}
                   </div>
-                ) : (
-                  <div className="grid w-full gap-2 sm:grid-cols-3">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleMutation({ action: "markRead", ids: selectedIds }, "bulk")}
-                      disabled={selectedCount === 0 || Boolean(pendingMutation)}
-                      className="h-9 w-full px-3 text-sm"
-                    >
-                      {isBulkReadPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Eye className="w-4 h-4" />}
-                      <span className="ml-1.5">{isBulkReadPending ? "Wird aktualisiert..." : "Als gelesen"}</span>
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleMutation({ action: "markUnread", ids: selectedIds }, "bulk")}
-                      disabled={selectedCount === 0 || Boolean(pendingMutation)}
-                      className="h-9 w-full px-3 text-sm"
-                    >
-                      {isBulkUnreadPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <EyeOff className="w-4 h-4" />}
-                      <span className="ml-1.5">{isBulkUnreadPending ? "Wird aktualisiert..." : "Als ungelesen"}</span>
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={handleStartBulkDelete}
-                      disabled={selectedCount === 0 || Boolean(pendingMutation)}
-                      className="h-9 w-full px-3 text-sm text-red-600 transition-none hover:border-red-200 hover:bg-red-50 hover:text-red-700"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                      <span className="ml-1.5">Auswahl löschen</span>
-                    </Button>
+                  <div className="w-full">
+                    {bulkDeletePhase === "idle" ? (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => startDeleteConfirmation(selectedIds, "bulk")}
+                        disabled={selectedCount === 0 || Boolean(pendingMutation)}
+                        className="h-9 w-full px-3 text-sm text-red-600 transition-none hover:border-red-200 hover:bg-red-50 hover:text-red-700"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                        <span className="ml-1.5">Auswahl löschen</span>
+                      </Button>
+                    ) : (
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        onClick={() => handleDelete(bulkDeleteIds, "bulk")}
+                        disabled={Boolean(pendingMutation)}
+                        className="h-9 w-full px-3 text-sm transition-none"
+                      >
+                        {isBulkDeletePending ? (
+                          <>
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            <span className="ml-1.5">Wird gelöscht...</span>
+                          </>
+                        ) : (
+                          <>
+                            <AlertTriangle className="w-4 h-4" />
+                            <span className="ml-1.5">Auswahl endgültig löschen</span>
+                          </>
+                        )}
+                      </Button>
+                    )}
                   </div>
-                )}
+                </div>
               </div>
             </div>
           )}
@@ -300,13 +341,10 @@ export function RequestsTab({ requests, onRequestsChange }: Props) {
                 pendingAction={getPendingAction(request.id)}
                 pendingSource={pendingMutationSource}
                 selectionDisabled={Boolean(pendingMutation)}
-                confirmingDelete={deleteConfirmation?.source === "single" && deleteConfirmation.ids.length === 1 && deleteConfirmation.ids[0] === request.id}
+                deletePhase={getDeletePhase("single", [request.id])}
                 onToggleSelection={() => handleToggleSelection(request.id)}
                 onToggleRead={() => handleToggleRead(request.id)}
-                onRequestDelete={() => {
-                  setRequestActionError("");
-                  setDeleteConfirmation({ ids: [request.id], source: "single" });
-                }}
+                onRequestDelete={() => startDeleteConfirmation([request.id], "single")}
                 onConfirmDelete={() => handleDelete([request.id], "single")}
                 onCancelDelete={() => setDeleteConfirmation(null)}
               />
@@ -364,7 +402,7 @@ interface RowProps {
   pendingAction: RequestMutationAction | null;
   pendingSource: MutationSource | null;
   selectionDisabled: boolean;
-  confirmingDelete: boolean;
+  deletePhase: DeletePhase;
   onToggleSelection: () => void;
   onToggleRead: () => void;
   onRequestDelete: () => void;
@@ -378,7 +416,7 @@ function RequestRow({
   pendingAction,
   pendingSource,
   selectionDisabled,
-  confirmingDelete,
+  deletePhase,
   onToggleSelection,
   onToggleRead,
   onRequestDelete,
@@ -387,6 +425,8 @@ function RequestRow({
 }: RowProps) {
   const isUpdatingRead = pendingAction === "markRead" || pendingAction === "markUnread";
   const isDeleting = pendingAction === "delete";
+  const isConfirmingDelete = deletePhase !== "idle";
+  const isPendingSingleDelete = deletePhase === "pending";
   const isBulkDeleting = isDeleting && pendingSource === "bulk";
 
   return (
@@ -420,7 +460,7 @@ function RequestRow({
         </div>
 
         <div className="flex flex-col items-stretch gap-2 mt-4 shrink-0 sm:flex-row sm:items-center lg:mt-0">
-          {!isDeleting && !confirmingDelete && (
+          {!isDeleting && !isConfirmingDelete && (
             <Button
               variant="outline"
               size="sm"
@@ -434,10 +474,10 @@ function RequestRow({
             </Button>
           )}
 
-          {confirmingDelete ? (
+          {isConfirmingDelete ? (
             <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center">
               <Button variant="destructive" size="sm" onClick={onConfirmDelete} disabled={selectionDisabled} className="w-full h-9 px-3 text-sm sm:w-auto">
-                {isDeleting ? (
+                {isPendingSingleDelete ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin" />
                     <span className="ml-1.5">Wird gelöscht...</span>
@@ -449,7 +489,7 @@ function RequestRow({
                   </>
                 )}
               </Button>
-              {!selectionDisabled && <Button variant="outline" size="sm" onClick={onCancelDelete} className="w-full h-9 px-3 text-sm sm:w-auto">Abbrechen</Button>}
+              {deletePhase === "confirming" && <Button variant="outline" size="sm" onClick={onCancelDelete} className="w-full h-9 px-3 text-sm sm:w-auto">Abbrechen</Button>}
             </div>
           ) : (
             <Button
