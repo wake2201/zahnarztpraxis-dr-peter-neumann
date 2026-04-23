@@ -15,5 +15,4 @@ export {
 
 export {
   getAuditLogs,
-  clearAuditLogs,
 } from "./actions/logs";

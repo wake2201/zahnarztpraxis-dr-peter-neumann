@@ -1,78 +1,81 @@
-import { prisma } from "./prisma";
 import { after } from "next/server";
+import { prisma } from "./prisma";
 import { logger } from "./logger";
 
 // ============================================================================
-// RATE LIMITING (DB-basiert — PostgreSQL)
+// RATE LIMITING (DB-basiert - PostgreSQL)
 // ============================================================================
-// Bei Skalierung auf >1000 req/min: Migration auf Redis/Upstash erwägen.
-// Für eine Zahnarztpraxis mit ~50 Besuchern/Tag ist PostgreSQL optimal —
-// kein zusätzlicher Infrastruktur-Dienst nötig.
+// Bei Skalierung auf >1000 req/min: Migration auf Redis/Upstash erwaegen.
+// Fuer eine Zahnarztpraxis mit ~50 Besuchern/Tag ist PostgreSQL optimal -
+// kein zusaetzlicher Infrastruktur-Dienst noetig.
 // ============================================================================
 
-const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000; // 1 Stunde
-const MAX_REQUESTS = 3; // NAT-IP-freundlich (Familie/Büro)
+const DEFAULT_RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000; // 1 Stunde
+const DEFAULT_MAX_REQUESTS = 3; // NAT-IP-freundlich (Familie/Buero)
+
+interface RateLimitOptions {
+  maxRequests?: number;
+  windowMs?: number;
+}
 
 /**
- * Atomarer Rate-Limit über ein SINGLE-STATEMENT UPSERT (race-frei).
+ * Atomarer Rate-Limit ueber ein SINGLE-STATEMENT UPSERT (race-frei).
  *
- * PostgreSQL `ON CONFLICT DO UPDATE` wird in einer Transaktion mit Row-Lock
- * ausgeführt — alle parallelen Requests werden seriell verarbeitet und sehen
- * konsistente `attempts`- und `last_reset`-Werte.
+ * Namespaced Keys (z.B. `contact:<ip>` oder `client-error:<ip>`) nutzen
+ * dieselbe Tabelle, ohne dass verschiedene Schutzmechanismen ihr Budget teilen.
  *
  * Der CASE-Ausdruck entscheidet server-seitig:
- *   - Fenster abgelaufen  → attempts := 1, last_reset := NOW()
- *   - Fenster aktiv       → attempts := attempts + 1 (kein lastReset-Refresh)
- *
- * Ersetzt den vorigen `findUnique → update` Fluss, der im Reset-Branch eine
- * klassische TOCTOU-Race hatte (N parallele Requests konnten alle attempts=1
- * schreiben und damit N-fach durchrutschen).
+ *   - Fenster abgelaufen  -> attempts := 1, last_reset := NOW()
+ *   - Fenster aktiv       -> attempts := attempts + 1 (kein lastReset-Refresh)
  */
-export async function checkRateLimitDb(ip: string): Promise<boolean> {
-  const windowStartMs = Date.now() - RATE_LIMIT_WINDOW_MS;
+export async function checkRateLimitDb(key: string, options: RateLimitOptions = {}): Promise<boolean> {
+  const windowMs = options.windowMs ?? DEFAULT_RATE_LIMIT_WINDOW_MS;
+  const maxRequests = options.maxRequests ?? DEFAULT_MAX_REQUESTS;
+  const windowStartMs = Date.now() - windowMs;
 
-  // Abgelaufene Einträge dieser IP nach der Response asynchron bereinigen.
+  // Abgelaufene Eintraege dieses Buckets nach der Response asynchron bereinigen.
   after(async () => {
     await prisma
       .$transaction(async (tx) => {
         await tx.rateLimit.deleteMany({
-          where: { ip, lastReset: { lt: new Date(windowStartMs) } },
+          where: { ip: key, lastReset: { lt: new Date(windowStartMs) } },
         });
       })
       .catch((err) => logger.error({ err, action: "checkRateLimitDb" }, "Rate-limit cleanup failed"));
   });
 
-  // cuid() als Fallback-ID — wird nur beim INSERT verwendet, nicht beim UPDATE.
-  // Kompromiss: Wir generieren die ID clientseitig (wie Prisma sonst auch).
+  // cuid() als Fallback-ID - wird nur beim INSERT verwendet, nicht beim UPDATE.
   const id = `cuid_${Math.random().toString(36).slice(2)}${Date.now().toString(36)}`;
 
-  const rows = await prisma.$queryRaw<Array<{ attempts: number }>>`
-    INSERT INTO rate_limits (id, ip, attempts, last_reset)
-    VALUES (${id}, ${ip}, 1, NOW())
-    ON CONFLICT (ip) DO UPDATE SET
-      attempts = CASE
-        WHEN rate_limits.last_reset < to_timestamp(${windowStartMs} / 1000.0)
-          THEN 1
-        ELSE rate_limits.attempts + 1
-      END,
-      last_reset = CASE
-        WHEN rate_limits.last_reset < to_timestamp(${windowStartMs} / 1000.0)
-          THEN NOW()
-        ELSE rate_limits.last_reset
-      END
-    RETURNING attempts;
-  `;
+  const rows = await prisma.$transaction(async (tx) => {
+    return tx.$queryRaw<Array<{ attempts: number }>>`
+      INSERT INTO rate_limits (id, ip, attempts, last_reset)
+      VALUES (${id}, ${key}, 1, NOW())
+      ON CONFLICT (ip) DO UPDATE SET
+        attempts = CASE
+          WHEN rate_limits.last_reset < to_timestamp(${windowStartMs} / 1000.0)
+            THEN 1
+          ELSE rate_limits.attempts + 1
+        END,
+        last_reset = CASE
+          WHEN rate_limits.last_reset < to_timestamp(${windowStartMs} / 1000.0)
+            THEN NOW()
+          ELSE rate_limits.last_reset
+        END
+      RETURNING attempts;
+    `;
+  });
 
   const attempts = rows[0]?.attempts ?? 1;
-  return attempts <= MAX_REQUESTS;
+  return attempts <= maxRequests;
 }
 
 /**
- * Periodischer Cleanup abgelaufener Rate-Limit-Einträge.
+ * Periodischer Cleanup abgelaufener Rate-Limit-Eintraege.
  * Wird nach erfolgreichem Kontaktformular-Submit aufgerufen.
  */
 export async function cleanupExpiredRateLimits(): Promise<void> {
-  const windowStart = new Date(Date.now() - RATE_LIMIT_WINDOW_MS);
+  const windowStart = new Date(Date.now() - DEFAULT_RATE_LIMIT_WINDOW_MS);
   await prisma
     .$transaction(async (tx) => {
       await tx.rateLimit.deleteMany({

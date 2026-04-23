@@ -2,7 +2,7 @@ import { z } from "zod";
 import { EUROPEAN_COUNTRY_CODES } from "./country-codes";
 
 // ============================================================================
-// FEHLERMELDUNGEN — Zentralisiert für potenzielle i18n-Migration
+// FEHLERMELDUNGEN - Zentralisiert fuer potenzielle i18n-Migration
 // ============================================================================
 
 export const ERROR_MESSAGES = {
@@ -14,7 +14,6 @@ export const ERROR_MESSAGES = {
   phoneRequired: "Telefonnummer ist erforderlich.",
   phoneTooLong: "Telefonnummer ist zu lang (max. 20 Zeichen).",
   phoneInvalid: "Bitte geben Sie eine gültige Telefonnummer ein.",
-  messageRequired: "Nachricht ist erforderlich.",
   messageTooLong: "Nachricht ist zu lang (max. 2000 Zeichen).",
   gdprConsentRequired: "Bitte stimmen Sie der Datenschutzerklärung zu.",
   invalidInput: "Ungültige Eingabe.",
@@ -39,19 +38,18 @@ export const ERROR_MESSAGES = {
 
   // Generische Action-Fehler
   statusUpdateFailed: "Status konnte nicht aktualisiert werden.",
-  requestDeleteFailed: "Anfrage konnte nicht gelöscht werden.",
+  requestDeleteFailed: "Anfrage konnte nicht geloescht werden.",
   userCreateFailed: "Ein unerwarteter Fehler ist aufgetreten.",
-  userDeleteFailed: "Benutzer konnte nicht gelöscht werden.",
-  logsClearFailed: "Logs konnten nicht geleert werden.",
+  userDeleteFailed: "Benutzer konnte nicht geloescht werden.",
 } as const;
 
 // ============================================================================
-// INPUT SANITIZATION — XSS Defense-in-Depth
+// INPUT SANITIZATION - XSS Defense-in-Depth
 // ============================================================================
 
 /**
  * Entfernt HTML-Tags und Null-Bytes aus User-Input.
- * Iterativer Ansatz schützt gegen verschachtelte Tags (z.B. `<scr<script>ipt>`).
+ * Iterativer Ansatz schuetzt gegen verschachtelte Tags (z.B. `<scr<script>ipt>`).
  */
 function sanitize(input: string): string {
   let clean = input.replace(/\0/g, "");
@@ -67,23 +65,65 @@ function sanitize(input: string): string {
 // ZOD VALIDATION SCHEMAS
 // ============================================================================
 
-const VALID_COUNTRY_CODES = EUROPEAN_COUNTRY_CODES.map((c) => c.code) as [string, ...string[]];
+const VALID_COUNTRY_CODES = EUROPEAN_COUNTRY_CODES.map((country) => country.code) as [string, ...string[]];
+const CONTACT_REQUEST_TYPES = ["appointment", "callback", "prescription", "other"] as const;
+const CONTACT_REACHABILITY_OPTIONS = ["morning", "afternoon", "flexible"] as const;
+const MAX_CONTACT_DETAILS_LENGTH = 1900;
 
 /**
- * Preprocess-Helper: sanitize + trim. Die Zod-Länge prüft den BEREINIGTEN
- * Wert — verhindert den Bypass `<p></p>` (7 Zeichen → nach sanitize leer).
+ * Preprocess-Helper: sanitize + trim. Die Zod-Laenge prueft den BEREINIGTEN
+ * Wert - verhindert den Bypass `<p></p>` (7 Zeichen -> nach sanitize leer).
  */
-const clean = (val: unknown) => typeof val === "string" ? sanitize(val).trim() : val;
+const clean = (value: unknown) => typeof value === "string" ? sanitize(value).trim() : value;
+const optionalClean = (value: unknown) => {
+  if (typeof value !== "string") {
+    return value;
+  }
+
+  const sanitized = sanitize(value).trim();
+  return sanitized.length > 0 ? sanitized : undefined;
+};
+
+const requestTypeSchema = z.preprocess(
+  clean,
+  z.string().refine(
+    (value) => (CONTACT_REQUEST_TYPES as readonly string[]).includes(value),
+    { message: ERROR_MESSAGES.invalidInput },
+  ),
+);
+
+const reachabilitySchema = z.preprocess(
+  optionalClean,
+  z
+    .string()
+    .refine(
+      (value) => (CONTACT_REACHABILITY_OPTIONS as readonly string[]).includes(value),
+      { message: ERROR_MESSAGES.invalidInput },
+    )
+    .optional(),
+);
 
 export const contactFormSchema = z.object({
   firstName: z.preprocess(clean, z.string().min(1, ERROR_MESSAGES.firstNameRequired).max(50, ERROR_MESSAGES.firstNameTooLong)),
   lastName: z.preprocess(clean, z.string().min(1, ERROR_MESSAGES.lastNameRequired).max(50, ERROR_MESSAGES.lastNameTooLong)),
   countryCode: z.enum(VALID_COUNTRY_CODES),
-  phone: z.preprocess(clean, z.string().min(1, ERROR_MESSAGES.phoneRequired).max(20, ERROR_MESSAGES.phoneTooLong)),
-  message: z.preprocess(clean, z.string().min(1, ERROR_MESSAGES.messageRequired).max(2000, ERROR_MESSAGES.messageTooLong)),
-  gdprConsent: z.boolean().refine((val) => val === true, { message: ERROR_MESSAGES.gdprConsentRequired }),
+  phone: z.preprocess(
+    clean,
+    z
+      .string()
+      .min(1, ERROR_MESSAGES.phoneRequired)
+      .max(20, ERROR_MESSAGES.phoneTooLong)
+      .regex(/^\d+$/, ERROR_MESSAGES.phoneInvalid),
+  ),
+  requestType: requestTypeSchema,
+  reachability: reachabilitySchema,
+  details: z.preprocess(
+    optionalClean,
+    z.string().max(MAX_CONTACT_DETAILS_LENGTH, ERROR_MESSAGES.messageTooLong).optional(),
+  ),
+  gdprConsent: z.boolean().refine((value) => value === true, { message: ERROR_MESSAGES.gdprConsentRequired }),
   honeypot: z.string().max(100).optional(),
-});
+}).strict();
 
 export const createUserSchema = z.object({
   name: z.preprocess(clean, z.string().min(1, ERROR_MESSAGES.nameRequired).max(100, ERROR_MESSAGES.nameTooLong)),
@@ -93,7 +133,7 @@ export const createUserSchema = z.object({
     .min(8, ERROR_MESSAGES.passwordTooShort)
     .regex(
       /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*(),.?":{}|<>])/,
-      ERROR_MESSAGES.passwordComplexity
+      ERROR_MESSAGES.passwordComplexity,
     ),
 });
 
@@ -113,9 +153,9 @@ export const toggleReadStatusSchema = z.object({
   newReadStatus: z.boolean(),
 });
 
-export const clientErrorLogSchema = z.object({
-  message: z.preprocess(clean, z.string().min(1, ERROR_MESSAGES.invalidInput).max(500, ERROR_MESSAGES.invalidInput)),
-  stack: z.preprocess(clean, z.string().max(10_000, ERROR_MESSAGES.invalidInput)).optional(),
-  digest: z.preprocess(clean, z.string().max(255, ERROR_MESSAGES.invalidInput)).optional(),
-  pathname: z.preprocess(clean, z.string().max(2048, ERROR_MESSAGES.invalidInput)).optional(),
-});
+export const clientErrorLogSchema = z
+  .object({
+    digest: z.preprocess(optionalClean, z.string().max(255, ERROR_MESSAGES.invalidInput).optional()),
+    pathname: z.preprocess(clean, z.string().max(2048, ERROR_MESSAGES.invalidInput).optional()),
+  })
+  .strict();

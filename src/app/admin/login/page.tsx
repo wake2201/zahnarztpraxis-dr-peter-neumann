@@ -20,7 +20,7 @@ export default function AdminLoginPage() {
     setLoading(true);
     setError("");
 
-    // redirect:false erlaubt uns, strukturierte Fehler-Codes (LOCKOUT_*)
+    // redirect:false erlaubt uns, strukturierte Fehler-Codes (LOCKOUT_*, AUTH_*)
     // aus auth.ts zu parsen, bevor wir manuell zur Ziel-Route weiterleiten.
     const result = await signIn("credentials", {
       email,
@@ -34,6 +34,8 @@ export default function AdminLoginPage() {
         if (parsed.code === "LOCKOUT_ACTIVE" || parsed.code === "LOCKOUT_TRIGGERED") {
           const min = parsed.remainingMinutes || 15;
           setError(`Zu viele fehlgeschlagene Versuche. Gesperrt für noch ${min} Minute${min > 1 ? "n" : ""}.`);
+        } else if (parsed.code === "AUTH_IP_UNAVAILABLE") {
+          setError("Anmeldung vorübergehend nicht verfügbar.");
         } else {
           setError("Ungültige Anmeldedaten. Bitte versuchen Sie es erneut.");
         }

@@ -31,6 +31,12 @@ export function AdminDashboardClient({
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<DashboardTab>("requests");
 
+  useEffect(() => {
+    if (!isAdmin && activeTab !== "requests") {
+      setActiveTab("requests");
+    }
+  }, [activeTab, isAdmin]);
+
   // Visibility-aware Polling. Intervall auf 30s erhoeht, damit die
   // Vercel-Invocations und DB-Hits deutlich niedriger bleiben.
   useEffect(() => {

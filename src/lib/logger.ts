@@ -32,6 +32,7 @@ export const logger = pino({
       "payload.firstName", "payload.lastName", "payload.name", "payload.message",
       // Direct Top-Level PII (konservativ — NIEMALS für Struktur-Felder nutzen)
       "password",
+      "userAgent",
     ],
     censor: "[REDACTED]",
   },

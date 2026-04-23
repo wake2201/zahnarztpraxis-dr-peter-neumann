@@ -1,9 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import { Trash2, AlertTriangle, Loader2, ScrollText } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { clearAuditLogs } from "@/lib/actions";
+import { ScrollText } from "lucide-react";
 import { ACTION_LABELS, type AuditLogEntry } from "./types";
 
 interface Props {
@@ -11,40 +8,14 @@ interface Props {
 }
 
 export function LogsTab({ auditLogs }: Props) {
-  const [isClearingLogs, startClearLogsTransition] = useTransition();
-  const [clearLogsConfirm, setClearLogsConfirm] = useState(false);
-  const [error, setError] = useState("");
-
-  function handleClearLogs() {
-    startClearLogsTransition(async () => {
-      const result = await clearAuditLogs();
-      if (!result.success) setError(result.error || "Fehler beim Leeren der Logs.");
-      setClearLogsConfirm(false);
-    });
-  }
-
   return (
     <div className="bg-white rounded-2xl shadow-card border border-slate-100 overflow-hidden">
-      <div className="px-6 py-4 border-b border-slate-100 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+      <div className="px-6 py-4 border-b border-slate-100">
         <div>
           <h2 className="text-lg font-bold text-slate-800">Aktivitätslog</h2>
           <p className="text-sm text-slate-500 mt-1">Letzte 100 Aktionen — Anmeldungen, Löschungen, Benutzerverwaltung</p>
-          {error && <p className="text-sm text-red-600 mt-1">{error}</p>}
+          <p className="text-sm text-slate-500 mt-1">Einträge können nicht manuell gelöscht werden.</p>
         </div>
-        {auditLogs.length > 0 && (
-          clearLogsConfirm ? (
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 flex-shrink-0 w-full sm:w-auto">
-              <Button variant="destructive" size="sm" onClick={handleClearLogs} disabled={isClearingLogs} className="w-full sm:w-auto text-sm px-3 h-9">
-                {isClearingLogs ? <Loader2 className="w-4 h-4 animate-spin" /> : <><AlertTriangle className="w-4 h-4 mr-1" />Endgültig leeren</>}
-              </Button>
-              {!isClearingLogs && <Button variant="outline" size="sm" onClick={() => setClearLogsConfirm(false)} className="w-full sm:w-auto text-sm px-3 h-9">Abbrechen</Button>}
-            </div>
-          ) : (
-            <Button variant="outline" size="sm" onClick={() => setClearLogsConfirm(true)} className="w-full sm:w-auto text-red-600 hover:bg-red-50 hover:text-red-700 hover:border-red-200 flex-shrink-0 text-sm px-3 h-9">
-              <Trash2 className="w-4 h-4 mr-1.5" />Logs leeren
-            </Button>
-          )
-        )}
       </div>
       {auditLogs.length === 0 ? (
         <div className="px-6 py-16 text-center">

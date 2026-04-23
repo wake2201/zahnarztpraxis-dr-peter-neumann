@@ -10,9 +10,9 @@ import {
 test.use({ viewport: { width: 1280, height: 720 } });
 
 async function dismissCookieBanner(page: Page) {
-  const banner = page.getByText("Cookie-Hinweis");
+  const banner = page.getByText("Datenschonende Website");
   if (await banner.isVisible({ timeout: 3000 }).catch(() => false)) {
-    await page.getByRole("button", { name: "Verstanden" }).click();
+    await page.getByRole("button", { name: "Alles klar" }).click();
     await banner.waitFor({ state: "hidden", timeout: 5000 });
   }
 }

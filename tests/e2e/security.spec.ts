@@ -1,5 +1,5 @@
 import { test, expect, APIResponse } from "@playwright/test";
-import { cleanupLoginAttempts, disconnectPrisma } from "./helpers/db-cleanup";
+import { cleanupLoginAttempts, cleanupRateLimits, disconnectPrisma } from "./helpers/db-cleanup";
 
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || "admin@zeitzer-zahnarzt.de";
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "Admin123!";
@@ -12,7 +12,12 @@ async function expectInvalidInputResponse(response: APIResponse) {
 test.use({ viewport: { width: 1280, height: 720 } });
 
 test.describe("Security — Edge Cases", () => {
+  test.beforeEach(async () => {
+    await cleanupRateLimits();
+  });
+
   test.afterAll(async () => {
+    await cleanupRateLimits();
     await cleanupLoginAttempts();
     await disconnectPrisma();
   });
@@ -76,11 +81,9 @@ test.describe("Security — Edge Cases", () => {
     await expect(page.getByText(/Gesperrt/i)).toBeVisible({ timeout: 10_000 });
   });
 
-  test("Client-Error-Route akzeptiert gültige Payloads", async ({ request }) => {
+  test("Client-Error-Route akzeptiert nur digest und pathname", async ({ request }) => {
     const res = await request.post("/api/log/client-error", {
       data: {
-        message: "Playwright client error",
-        stack: "Error: Playwright client error",
         digest: "digest-123",
         pathname: "/admin",
       },
@@ -104,8 +107,6 @@ test.describe("Security — Edge Cases", () => {
   test("Client-Error-Route lehnt falsche Feldtypen ab", async ({ request }) => {
     const res = await request.post("/api/log/client-error", {
       data: {
-        message: 123,
-        stack: true,
         digest: ["digest"],
         pathname: { value: "/admin" },
       },
@@ -115,14 +116,42 @@ test.describe("Security — Edge Cases", () => {
     await expectInvalidInputResponse(res);
   });
 
-  test("Client-Error-Route lehnt zu lange Nachrichten ab", async ({ request }) => {
+  test("Client-Error-Route lehnt zusaetzliche Felder ab", async ({ request }) => {
     const res = await request.post("/api/log/client-error", {
       data: {
-        message: "x".repeat(501),
+        digest: "digest-123",
+        pathname: "/admin",
+        message: "Playwright client error",
+        stack: "Error: Playwright client error",
       },
     });
 
     expect(res.status()).toBe(400);
     await expectInvalidInputResponse(res);
+  });
+
+  test("Client-Error-Route rate-limited wiederholte Requests", async ({ request }) => {
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+      const response = await request.post("/api/log/client-error", {
+        data: {
+          digest: `digest-${attempt}`,
+          pathname: "/admin",
+        },
+      });
+
+      expect(response.status()).toBe(204);
+    }
+
+    const blocked = await request.post("/api/log/client-error", {
+      data: {
+        digest: "digest-blocked",
+        pathname: "/admin",
+      },
+    });
+
+    expect(blocked.status()).toBe(429);
+    await expect(blocked.json()).resolves.toEqual({
+      error: "Ein unerwarteter Fehler ist aufgetreten. Bitte versuchen Sie es später erneut.",
+    });
   });
 });

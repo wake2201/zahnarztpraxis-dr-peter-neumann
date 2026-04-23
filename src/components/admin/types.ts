@@ -9,11 +9,13 @@ export interface ContactRequest {
   createdAt: string;
 }
 
+export type UserAccountRole = "admin" | "staff" | "unknown";
+
 export interface UserAccount {
   id: string;
   email: string;
   name: string | null;
-  role: string;
+  role: UserAccountRole;
   createdAt: string;
 }
 
@@ -33,5 +35,4 @@ export const ACTION_LABELS: Record<string, string> = {
   DELETE_REQUEST: "Anfrage gelöscht",
   CREATE_USER: "Benutzer erstellt",
   DELETE_USER: "Benutzer gelöscht",
-  CLEAR_LOGS: "Logs geleert",
 };

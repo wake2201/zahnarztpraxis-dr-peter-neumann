@@ -1,18 +1,30 @@
 import { headers } from "next/headers";
 
+export const TRUSTED_IP_ERROR_CODE = "TRUSTED_IP_UNAVAILABLE";
+
+export class TrustedClientIpError extends Error {
+  code = TRUSTED_IP_ERROR_CODE;
+
+  constructor() {
+    super("Trusted client IP could not be derived from the current request.");
+    this.name = "TrustedClientIpError";
+  }
+}
+
 /**
- * Vertrauenswürdige Client-IP-Ermittlung.
+ * Vertrauenswuerdige Client-IP-Ermittlung.
  *
  * `TRUST_PROXY` (env) muss auf `true` gesetzt werden, wenn die App
- * hinter einem konfigurierten Reverse-Proxy läuft, der `x-real-ip` oder
- * `x-forwarded-for` überschreibt. Ohne Proxy darf NIEMALS auf diese
+ * hinter einem konfigurierten Reverse-Proxy laeuft, der `x-real-ip` oder
+ * `x-forwarded-for` ueberschreibt. Ohne Proxy darf NIEMALS auf diese
  * Header vertraut werden (Client kann sie direkt setzen).
  *
  * Reihenfolge (nur auf echte, vom Host signierte Header vertrauen):
- * 1. `x-vercel-forwarded-for`  → Vercel Edge (fälschungssicher auf Vercel).
- * 2. `x-real-ip`               → nur wenn TRUST_PROXY=true (Nginx/Traefik).
- * 3. `x-forwarded-for` letzter Eintrag → nur wenn TRUST_PROXY=true.
- * 4. `"unknown"`               → globaler Bucket (siehe ARCHITECTURE.md §6).
+ * 1. `x-vercel-forwarded-for`  -> Vercel Edge (faelschungssicher auf Vercel).
+ * 2. `x-real-ip`               -> nur wenn TRUST_PROXY=true (Nginx/Traefik).
+ * 3. `x-forwarded-for` letzter Eintrag -> nur wenn TRUST_PROXY=true.
+ * 4. Lokal (Dev/Test)          -> Loopback-Fallback fuer lokale Entwicklung.
+ * 5. Produktion ohne Trust     -> fail closed statt globalem "unknown"-Bucket.
  */
 export async function getClientIp(): Promise<string> {
   const h = await headers();
@@ -26,14 +38,26 @@ export async function getClientIp(): Promise<string> {
   const trustProxy = process.env.TRUST_PROXY === "true";
   if (trustProxy) {
     const realIp = h.get("x-real-ip");
-    if (realIp) return realIp.trim();
+    if (realIp) {
+      return realIp.trim();
+    }
 
     const xff = h.get("x-forwarded-for");
     if (xff) {
-      const parts = xff.split(",").map((p) => p.trim()).filter(Boolean);
-      if (parts.length > 0) return parts[parts.length - 1];
+      const parts = xff.split(",").map((part) => part.trim()).filter(Boolean);
+      if (parts.length > 0) {
+        return parts[parts.length - 1];
+      }
     }
   }
 
-  return "unknown";
+  if (process.env.NODE_ENV !== "production") {
+    return "127.0.0.1";
+  }
+
+  throw new TrustedClientIpError();
+}
+
+export function isTrustedClientIpError(error: unknown): error is TrustedClientIpError {
+  return error instanceof TrustedClientIpError;
 }

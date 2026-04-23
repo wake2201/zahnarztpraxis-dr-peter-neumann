@@ -3,6 +3,7 @@
 import { after } from "next/server";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { publicContent } from "@/content/data";
 import { prisma } from "../prisma";
 import {
   actionCursorSchema,
@@ -13,16 +14,38 @@ import {
 } from "../schemas";
 import { checkRateLimitDb, cleanupExpiredRateLimits } from "../rate-limit";
 import { logger } from "../logger";
-import { getClientIp } from "../client-ip";
+import { getClientIp, isTrustedClientIpError } from "../client-ip";
 import { requireAuth } from "./auth-helpers";
 
 const MAX_REQUESTS_PER_PAGE = 50;
+type ContactFormData = z.output<typeof contactFormSchema>;
+
+function buildContactMessage(data: ContactFormData) {
+  const requestTypeLabel =
+    publicContent.contact.requestTypeOptions.find((option) => option.value === data.requestType)?.label ?? "Sonstiges";
+  const reachabilityLabel =
+    typeof data.reachability === "string"
+      ? publicContent.contact.reachabilityOptions.find((option) => option.value === data.reachability)?.label ?? ""
+      : "";
+
+  const segments = [`Anliegen: ${requestTypeLabel}.`];
+
+  if (reachabilityLabel) {
+    segments.push(`Erreichbarkeit: ${reachabilityLabel}.`);
+  }
+
+  if (data.details) {
+    segments.push(`Zusätzliche Informationen: ${data.details}`);
+  }
+
+  return segments.join(" ");
+}
 
 export async function submitContactForm(data: z.input<typeof contactFormSchema>) {
   try {
     const ip = await getClientIp();
 
-    if (!(await checkRateLimitDb(ip))) {
+    if (!(await checkRateLimitDb(`contact:${ip}`))) {
       return { success: false, error: ERROR_MESSAGES.rateLimited };
     }
 
@@ -38,19 +61,14 @@ export async function submitContactForm(data: z.input<typeof contactFormSchema>)
       return { success: false, error: firstError };
     }
 
-    const cleanPhone = parsed.data.phone.replace(/\D/g, "");
-    if (cleanPhone.length === 0) {
-      return { success: false, error: ERROR_MESSAGES.phoneInvalid };
-    }
-
     await prisma.$transaction(async (tx) => {
       await tx.contactRequest.create({
         data: {
           firstName: parsed.data.firstName,
           lastName: parsed.data.lastName,
           countryCode: parsed.data.countryCode,
-          phone: cleanPhone,
-          message: parsed.data.message,
+          phone: parsed.data.phone,
+          message: buildContactMessage(parsed.data),
           gdprConsent: parsed.data.gdprConsent,
         },
       });
@@ -62,6 +80,10 @@ export async function submitContactForm(data: z.input<typeof contactFormSchema>)
 
     return { success: true };
   } catch (error) {
+    if (isTrustedClientIpError(error)) {
+      return { success: false, error: ERROR_MESSAGES.unexpectedError };
+    }
+
     logger.error({ err: error, action: "submitContactForm" }, "[submitContactForm] Server Action fehlgeschlagen");
     return { success: false, error: ERROR_MESSAGES.unexpectedError };
   }

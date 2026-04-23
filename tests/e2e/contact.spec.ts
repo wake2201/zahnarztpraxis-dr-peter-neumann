@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page, type Route } from "@playwright/test";
 import {
   cleanupRateLimits,
   cleanupTestContactRequests,
@@ -16,9 +16,9 @@ test.use({ viewport: { width: 1280, height: 720 } });
 
 /** Cookie-Banner schließen und warten, bis es komplett verschwunden ist. */
 async function dismissCookieBanner(page: Page) {
-  const banner = page.getByText("Cookie-Hinweis");
+  const banner = page.getByText("Datenschonende Website");
   if (await banner.isVisible({ timeout: 3000 }).catch(() => false)) {
-    await page.getByRole("button", { name: "Verstanden" }).click();
+    await page.getByRole("button", { name: "Alles klar" }).click();
     await banner.waitFor({ state: "hidden", timeout: 5000 });
   }
 }
@@ -109,6 +109,58 @@ test.describe("Kontaktformular", () => {
     await expect(page.getByText("Vielen Dank für Ihre Anfrage!")).toBeVisible({ timeout: 10_000 });
 
     const exists = await contactRequestExists(honeypotFirstName);
+    expect(exists).toBe(false);
+  });
+
+  test("Server-seitige Validierung blockiert manipulierte Telefonnummern", async ({ page }) => {
+    const firstName = `E2E-Test-Phone-${Date.now()}`;
+    const validPhone = "1234567890";
+    const tamperedPhone = "123abc7890";
+
+    await page.goto("/");
+    await dismissCookieBanner(page);
+
+    await page.locator("#kontakt").scrollIntoViewIfNeeded();
+
+    await page.getByLabel("Vorname").fill(firstName);
+    await page.getByLabel("Nachname").fill(TEST_LAST_NAME);
+    await page.getByLabel("Telefonnummer").fill(validPhone);
+    await page.getByLabel("Anliegen").selectOption("callback");
+    await page.getByLabel(/Ich stimme zu/i).check();
+
+    let tampered = false;
+    const handler = async (route: Route) => {
+      const request = route.request();
+      const nextAction = request.headers()["next-action"];
+      const postData = request.postData();
+
+      if (request.method() === "POST" && nextAction && postData?.includes(validPhone)) {
+        tampered = true;
+        await route.continue({
+          postData: postData.replace(validPhone, tamperedPhone),
+        });
+        return;
+      }
+
+      await route.continue();
+    };
+
+    await page.route("**/*", handler);
+
+    try {
+      const submitButton = page.getByRole("button", { name: "Anfrage absenden" });
+      await submitButton.scrollIntoViewIfNeeded();
+      await submitButton.click();
+
+      await expect(page.getByText("Bitte geben Sie eine gültige Telefonnummer ein.")).toBeVisible({
+        timeout: 10_000,
+      });
+    } finally {
+      await page.unroute("**/*", handler);
+    }
+
+    expect(tampered).toBe(true);
+    const exists = await contactRequestExists(firstName);
     expect(exists).toBe(false);
   });
 });

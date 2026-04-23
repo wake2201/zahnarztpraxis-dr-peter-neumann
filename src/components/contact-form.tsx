@@ -70,29 +70,6 @@ function normalizePhone(phone: string) {
   return digits;
 }
 
-function buildMessage(
-  requestType: ContactRequestType,
-  reachability: ContactReachability | "",
-  details: string,
-) {
-  const { contact } = publicContent;
-  const requestTypeLabel = contact.requestTypeOptions.find((option) => option.value === requestType)?.label ?? "Sonstiges";
-  const reachabilityLabel = contact.reachabilityOptions.find((option) => option.value === reachability)?.label ?? "";
-  const trimmedDetails = details.trim();
-
-  const segments = [`Anliegen: ${requestTypeLabel}.`];
-
-  if (reachabilityLabel) {
-    segments.push(`Erreichbarkeit: ${reachabilityLabel}.`);
-  }
-
-  if (trimmedDetails) {
-    segments.push(`Zusätzliche Informationen: ${trimmedDetails}`);
-  }
-
-  return segments.join(" ");
-}
-
 export function ContactForm() {
   const ref = useRef<HTMLElement | null>(null);
   const isInView = useInView(ref, { once: true, margin: "-100px" });
@@ -143,7 +120,9 @@ export function ContactForm() {
           lastName,
           countryCode,
           phone: normalizedPhone.length > 0 ? normalizedPhone : phone.replace(/\D/g, ""),
-          message: buildMessage(requestType, reachability, details),
+          requestType,
+          reachability: reachability || undefined,
+          details,
           gdprConsent,
           honeypot,
         });

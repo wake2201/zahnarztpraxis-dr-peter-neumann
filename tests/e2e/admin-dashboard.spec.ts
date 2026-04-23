@@ -3,8 +3,6 @@ import {
   cleanupLoginAttempts,
   cleanupTestContactRequests,
   cleanupUsersByEmail,
-  countAuditLogs,
-  countAuditLogsByAction,
   createTestAuditLog,
   createTestContactRequest,
   disconnectPrisma,
@@ -256,27 +254,27 @@ test.describe("Admin Dashboard", () => {
     await expect(page.getByText(PROMOTED_STAFF_EMAIL)).toBeVisible();
   });
 
-  test("Logs leeren hinterlässt genau einen CLEAR_LOGS-Eintrag", async ({ page }) => {
+  test("Aktivitätslog bietet keine destructive Clear-Aktion", async ({ page }) => {
     const snapshot = await snapshotAuditLogs();
+    const logDetails = `E2E-Test Log Seed ${Date.now()}`;
     await createTestAuditLog({
       action: "LOGIN",
-      details: `E2E-Test Log Seed ${Date.now()}`,
+      details: logDetails,
     });
 
     try {
       await loginAsAdmin(page);
       await openLogsTab(page);
 
-      await page.getByRole("button", { name: /Logs leeren/i }).click();
-      await page.getByRole("button", { name: /Endgültig leeren/i }).click();
-
-      await expect.poll(async () => countAuditLogs()).toBe(1);
-      await expect.poll(async () => countAuditLogsByAction("CLEAR_LOGS")).toBe(1);
+      await expect(page.getByRole("button", { name: /Logs leeren/i })).toHaveCount(0);
+      await expect(page.getByText("Einträge können nicht manuell gelöscht werden.")).toBeVisible();
+      await expect(page.getByText(logDetails)).toBeVisible();
 
       await page.reload();
       await expect(page.getByRole("button", { name: /Abmelden/i })).toBeVisible({ timeout: 15_000 });
       await openLogsTab(page);
-      await expect(page.getByText("Logs geleert")).toBeVisible();
+      await expect(page.getByRole("button", { name: /Logs leeren/i })).toHaveCount(0);
+      await expect(page.getByText(logDetails)).toBeVisible();
     } finally {
       await restoreAuditLogs(snapshot);
     }

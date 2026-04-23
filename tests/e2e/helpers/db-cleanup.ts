@@ -1,7 +1,7 @@
 import bcrypt from "bcryptjs";
 import { prisma } from "../../../src/lib/prisma";
 
-export interface TestContactRequest {
+interface TestContactRequest {
   id: string;
   firstName: string;
   lastName: string;
@@ -13,7 +13,7 @@ export interface TestContactRequest {
   createdAt: Date;
 }
 
-export interface AuditLogSnapshotEntry {
+interface AuditLogSnapshotEntry {
   id: string;
   userId: string;
   userName: string;
@@ -142,7 +142,7 @@ export async function ensureTestUser(data: {
   });
 }
 
-export async function findUserByEmail(email: string) {
+async function findUserByEmail(email: string) {
   const normalizedEmail = email.trim().toLowerCase();
   return prisma.user.findUnique({
     where: { email: normalizedEmail },
@@ -217,23 +217,6 @@ export async function createTestAuditLog(data: Partial<Omit<AuditLogSnapshotEntr
         details: data.details ?? `E2E-Test Audit ${Date.now()}`,
       },
     });
-  });
-}
-
-export async function countAuditLogsByAction(action: string): Promise<number> {
-  return prisma.auditLog.count({
-    where: { action },
-  });
-}
-
-export async function countAuditLogs(): Promise<number> {
-  return prisma.auditLog.count();
-}
-
-export async function findLatestAuditLogByAction(action: string) {
-  return prisma.auditLog.findFirst({
-    where: { action },
-    orderBy: { createdAt: "desc" },
   });
 }
 

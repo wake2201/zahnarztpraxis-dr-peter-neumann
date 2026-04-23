@@ -16,8 +16,6 @@ export default function GlobalError({
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        message: error.message,
-        stack: error.stack,
         digest: error.digest,
         pathname: window.location.pathname,
       }),

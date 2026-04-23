@@ -14,16 +14,12 @@ export function CookieBanner() {
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
-    const isDismissed = localStorage.getItem("cookie-info-dismissed");
-    if (!isDismissed) {
-      // Kurze Verzögerung für weicheres Einblenden nach dem Page-Load
-      const timer = setTimeout(() => setVisible(true), 1500);
-      return () => clearTimeout(timer);
-    }
+    // Kurze Verzögerung für weicheres Einblenden nach dem Page-Load
+    const timer = setTimeout(() => setVisible(true), 1500);
+    return () => clearTimeout(timer);
   }, []);
 
   function dismiss() {
-    localStorage.setItem("cookie-info-dismissed", "true");
     setVisible(false);
   }
 

@@ -5,11 +5,12 @@ import crypto from "crypto";
 import { headers } from "next/headers";
 import { Prisma } from "../generated/prisma";
 import { prisma } from "./prisma";
-import { getClientIp } from "./client-ip";
+import { getClientIp, isTrustedClientIpError } from "./client-ip";
 
 const LOCKOUT_DURATION = 15 * 60 * 1000; // 15 Minuten
 const MAX_ATTEMPTS = 3;
 const MAX_TRANSACTION_RETRIES = 3;
+const AUTH_IP_UNAVAILABLE_CODE = "AUTH_IP_UNAVAILABLE";
 
 const NEXTAUTH_SECRET = process.env.NEXTAUTH_SECRET;
 if (!NEXTAUTH_SECRET || NEXTAUTH_SECRET.length < 32) {
@@ -76,12 +77,23 @@ export const authOptions: NextAuthOptions = {
         }
 
         const email = credentials.email.toLowerCase();
+        let ip: string;
+        let headersList: Awaited<ReturnType<typeof headers>>;
+
+        try {
+          ip = await getClientIp();
+          headersList = await headers();
+        } catch (error) {
+          if (isTrustedClientIpError(error)) {
+            throw new Error(JSON.stringify({ code: AUTH_IP_UNAVAILABLE_CODE }));
+          }
+
+          throw error;
+        }
 
         // Zwei Lockout-Buckets:
         // - emailIdentifier: granular pro Account
         // - ipIdentifier: verhindert Enumerations-Bursts pro IP + UserAgent
-        const ip = await getClientIp();
-        const headersList = await headers();
         const userAgent = headersList.get("user-agent") || "unknown";
         const baseHash = hashIdentifier(ip, userAgent);
         const emailIdentifier = `${baseHash}-${email}`;
@@ -210,9 +222,13 @@ export const authOptions: NextAuthOptions = {
         );
 
         // Abgelaufene Lockouts koennen im Hintergrund aufgeraeumt werden.
-        void prisma.loginAttempt.deleteMany({
-          where: { lockedUntil: { lt: new Date() } },
-        }).catch(() => {});
+        void prisma
+          .$transaction(async (tx) => {
+            await tx.loginAttempt.deleteMany({
+              where: { lockedUntil: { lt: new Date() } },
+            });
+          })
+          .catch(() => {});
 
         if (result.status === "locked") {
           throw new Error(JSON.stringify({ code: result.code, remainingMinutes: result.remainingMinutes }));

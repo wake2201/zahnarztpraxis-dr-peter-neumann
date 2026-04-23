@@ -7,6 +7,7 @@ import { prisma } from "../prisma";
 import { actionIdSchema, createUserSchema, ERROR_MESSAGES } from "../schemas";
 import { logger } from "../logger";
 import { normalizeRole } from "../auth";
+import type { UserAccount } from "@/components/admin/types";
 import { requireAdmin } from "./auth-helpers";
 
 export async function createUser(data: { email: string; password: string; name: string }) {
@@ -130,7 +131,7 @@ export async function deleteUser(id: string) {
   }
 }
 
-export async function getUsers() {
+export async function getUsers(): Promise<UserAccount[]> {
   await requireAdmin();
 
   const users = await prisma.user.findMany({
@@ -138,9 +139,15 @@ export async function getUsers() {
     orderBy: { createdAt: "desc" },
   });
 
-  return users.map((user) => ({
-    ...user,
-    role: normalizeRole(user.role) ?? "admin",
-    createdAt: user.createdAt.toISOString(),
-  }));
+  return users.map((user) => {
+    const role = normalizeRole(user.role) ?? "unknown";
+
+    return {
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      role,
+      createdAt: user.createdAt.toISOString(),
+    };
+  });
 }
