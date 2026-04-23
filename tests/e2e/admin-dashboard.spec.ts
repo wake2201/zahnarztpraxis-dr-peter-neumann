@@ -40,6 +40,18 @@ function expectStableBoundingBox(current: BoundingRect, baseline: BoundingRect) 
   expect(Math.abs(current.height - baseline.height)).toBeLessThanOrEqual(1);
 }
 
+function expectLeftButtonToLeadAndFit(left: BoundingRect, right: BoundingRect) {
+  expect(left).not.toBeNull();
+  expect(right).not.toBeNull();
+
+  if (!left || !right) {
+    return;
+  }
+
+  expect(left.x).toBeLessThan(right.x);
+  expect(left.width).toBeGreaterThan(right.width);
+}
+
 async function loginAsAdmin(page: Page) {
   await page.goto("/admin/login");
   await page.getByLabel("E-Mail").fill(ADMIN_EMAIL);
@@ -384,6 +396,8 @@ test.describe("Admin Dashboard", () => {
     const bulkActions = page.getByTestId("request-bulk-actions");
     const baselineBox = await bulkActions.boundingBox();
     const baselineDeleteButtonBox = await bulkDeleteButton.boundingBox();
+    let baselineConfirmButtonBox: BoundingRect = null;
+    let baselineCancelButtonBox: BoundingRect = null;
 
     for (let attempt = 0; attempt < 3; attempt += 1) {
       await bulkDeleteButton.click();
@@ -391,8 +405,18 @@ test.describe("Admin Dashboard", () => {
       await expect(confirmBulkDeleteButton).toBeVisible();
       const cancelBulkDeleteButton = page.getByRole("button", { name: /^Abbrechen$/i });
       await expect(cancelBulkDeleteButton).toBeVisible();
+      const confirmBulkDeleteButtonBox = await confirmBulkDeleteButton.boundingBox();
+      const cancelBulkDeleteButtonBox = await cancelBulkDeleteButton.boundingBox();
       expectStableBoundingBox(await bulkActions.boundingBox(), baselineBox);
-      expectStableBoundingBox(await confirmBulkDeleteButton.boundingBox(), baselineDeleteButtonBox);
+      expectLeftButtonToLeadAndFit(confirmBulkDeleteButtonBox, cancelBulkDeleteButtonBox);
+
+      if (attempt === 0) {
+        baselineConfirmButtonBox = confirmBulkDeleteButtonBox;
+        baselineCancelButtonBox = cancelBulkDeleteButtonBox;
+      } else {
+        expectStableBoundingBox(confirmBulkDeleteButtonBox, baselineConfirmButtonBox);
+        expectStableBoundingBox(cancelBulkDeleteButtonBox, baselineCancelButtonBox);
+      }
 
       await cancelBulkDeleteButton.click();
       await expect(bulkDeleteButton).toBeVisible();
@@ -405,8 +429,12 @@ test.describe("Admin Dashboard", () => {
     await expect(confirmBulkDeleteButton).toBeVisible();
     const cancelBulkDeleteButton = page.getByRole("button", { name: /^Abbrechen$/i });
     await expect(cancelBulkDeleteButton).toBeVisible();
+    const confirmBulkDeleteButtonBox = await confirmBulkDeleteButton.boundingBox();
+    const cancelBulkDeleteButtonBox = await cancelBulkDeleteButton.boundingBox();
     expectStableBoundingBox(await bulkActions.boundingBox(), baselineBox);
-    expectStableBoundingBox(await confirmBulkDeleteButton.boundingBox(), baselineDeleteButtonBox);
+    expectStableBoundingBox(confirmBulkDeleteButtonBox, baselineConfirmButtonBox);
+    expectStableBoundingBox(cancelBulkDeleteButtonBox, baselineCancelButtonBox);
+    expectLeftButtonToLeadAndFit(confirmBulkDeleteButtonBox, cancelBulkDeleteButtonBox);
 
     const delayedDeleteAction = await delayNextServerAction(page);
     try {
@@ -414,7 +442,7 @@ test.describe("Admin Dashboard", () => {
 
       const pendingBulkDeleteButton = page.getByRole("button", { name: /Wird gelöscht/i }).first();
       await expect(pendingBulkDeleteButton).toBeDisabled({ timeout: 10_000 });
-      expectStableBoundingBox(await pendingBulkDeleteButton.boundingBox(), baselineDeleteButtonBox);
+      expectStableBoundingBox(await pendingBulkDeleteButton.boundingBox(), baselineConfirmButtonBox);
       expect(delayedDeleteAction.wasIntercepted()).toBe(true);
       expect(await getContactRequestById(firstRequest.id)).not.toBe(null);
       expect(await getContactRequestById(secondRequest.id)).not.toBe(null);

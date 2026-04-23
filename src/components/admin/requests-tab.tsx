@@ -261,7 +261,7 @@ export function RequestsTab({ requests, onRequestsChange }: Props) {
                       <div aria-hidden="true" className="hidden h-9 sm:block" />
                     )}
                   </div>
-                  <div className="w-full">
+                  <div className={bulkDeletePhase === "idle" ? "w-full" : "w-full sm:col-span-2"}>
                     {bulkDeletePhase === "idle" ? (
                       <Button
                         variant="outline"
@@ -273,21 +273,44 @@ export function RequestsTab({ requests, onRequestsChange }: Props) {
                         {isBulkUnreadPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <EyeOff className="w-4 h-4" />}
                         <span className="ml-1.5">{isBulkUnreadPending ? "Wird aktualisiert..." : "Als ungelesen"}</span>
                       </Button>
-                    ) : bulkDeletePhase === "confirming" ? (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setDeleteConfirmation(null)}
-                        className="h-9 w-full px-3 text-sm transition-none"
-                      >
-                        Abbrechen
-                      </Button>
                     ) : (
-                      <div aria-hidden="true" className="hidden h-9 sm:block" />
+                      <div className="grid w-full gap-2 sm:grid-cols-[minmax(0,1.35fr)_minmax(0,0.85fr)]">
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          onClick={() => handleDelete(bulkDeleteIds, "bulk")}
+                          disabled={Boolean(pendingMutation)}
+                          className="h-9 w-full px-3 text-sm transition-none"
+                        >
+                          {isBulkDeletePending ? (
+                            <>
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                              <span className="ml-1.5">Wird gelöscht...</span>
+                            </>
+                          ) : (
+                            <>
+                              <AlertTriangle className="w-4 h-4" />
+                              <span className="ml-1.5">Auswahl endgültig löschen</span>
+                            </>
+                          )}
+                        </Button>
+                        {bulkDeletePhase === "confirming" ? (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setDeleteConfirmation(null)}
+                            className="h-9 w-full px-3 text-sm transition-none"
+                          >
+                            Abbrechen
+                          </Button>
+                        ) : (
+                          <div aria-hidden="true" className="hidden h-9 sm:block" />
+                        )}
+                      </div>
                     )}
                   </div>
-                  <div className="w-full">
-                    {bulkDeletePhase === "idle" ? (
+                  {bulkDeletePhase === "idle" && (
+                    <div className="w-full">
                       <Button
                         variant="outline"
                         size="sm"
@@ -298,28 +321,8 @@ export function RequestsTab({ requests, onRequestsChange }: Props) {
                         <Trash2 className="w-4 h-4" />
                         <span className="ml-1.5">Auswahl löschen</span>
                       </Button>
-                    ) : (
-                      <Button
-                        variant="destructive"
-                        size="sm"
-                        onClick={() => handleDelete(bulkDeleteIds, "bulk")}
-                        disabled={Boolean(pendingMutation)}
-                        className="h-9 w-full px-3 text-sm transition-none"
-                      >
-                        {isBulkDeletePending ? (
-                          <>
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                            <span className="ml-1.5">Wird gelöscht...</span>
-                          </>
-                        ) : (
-                          <>
-                            <AlertTriangle className="w-4 h-4" />
-                            <span className="ml-1.5">Auswahl endgültig löschen</span>
-                          </>
-                        )}
-                      </Button>
-                    )}
-                  </div>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
