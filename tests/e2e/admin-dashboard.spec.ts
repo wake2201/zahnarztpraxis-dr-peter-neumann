@@ -24,6 +24,33 @@ const PROMOTED_STAFF_EMAIL = "promoted-staff@test.de";
 
 test.use({ viewport: { width: 1280, height: 720 } });
 
+type BoundingRect = { x: number; y: number; width: number; height: number } | null;
+
+function expectStableBoundingBox(current: BoundingRect, baseline: BoundingRect) {
+  expect(current).not.toBeNull();
+  expect(baseline).not.toBeNull();
+
+  if (!current || !baseline) {
+    return;
+  }
+
+  expect(Math.abs(current.x - baseline.x)).toBeLessThanOrEqual(1);
+  expect(Math.abs(current.y - baseline.y)).toBeLessThanOrEqual(1);
+  expect(Math.abs(current.width - baseline.width)).toBeLessThanOrEqual(1);
+  expect(Math.abs(current.height - baseline.height)).toBeLessThanOrEqual(1);
+}
+
+function expectStableRightEdge(current: BoundingRect, baseline: BoundingRect) {
+  expect(current).not.toBeNull();
+  expect(baseline).not.toBeNull();
+
+  if (!current || !baseline) {
+    return;
+  }
+
+  expect(Math.abs((current.x + current.width) - (baseline.x + baseline.width))).toBeLessThanOrEqual(1);
+}
+
 async function loginAsAdmin(page: Page) {
   await page.goto("/admin/login");
   await page.getByLabel("E-Mail").fill(ADMIN_EMAIL);
@@ -202,6 +229,8 @@ test.describe("Admin Dashboard", () => {
       await row.getByRole("button", { name: /Gelesen/i }).click();
 
       await expect(row.getByRole("button", { name: /Wird aktualisiert/i })).toBeDisabled({ timeout: 10_000 });
+      await expect(page.getByRole("button", { name: /^Als gelesen$/i })).toBeVisible();
+      await expect(page.getByRole("button", { name: /^Als ungelesen$/i })).toBeVisible();
       expect(delayedAction.wasIntercepted()).toBe(true);
       expect(await getContactRequestReadState(request.id)).toBe(false);
       expect(await requestStatValue(page, "unread")).toBe(baselineUnread);
@@ -234,13 +263,14 @@ test.describe("Admin Dashboard", () => {
     const baselineTotal = await requestStatValue(page, "total");
     expect(baselineTotal).toBeGreaterThanOrEqual(1);
 
-    await row.getByRole("button", { name: /Loeschen|Löschen/i }).click();
+    await row.getByRole("button", { name: /Löschen/i }).click();
 
     const delayedAction = await delayNextServerAction(page);
     try {
-      await page.getByRole("button", { name: /Endgueltig loeschen|Endgültig löschen/i }).click();
+      await page.getByRole("button", { name: /Endgültig löschen/i }).click();
 
-      await expect(page.getByRole("button", { name: /Wird geloescht/i })).toBeDisabled({ timeout: 10_000 });
+      await expect(page.getByRole("button", { name: /Wird gelöscht/i })).toBeDisabled({ timeout: 10_000 });
+      await expect(page.getByRole("button", { name: /^Auswahl löschen$/i })).toBeVisible();
       expect(delayedAction.wasIntercepted()).toBe(true);
       expect(await getContactRequestById(request.id)).not.toBe(null);
       expect(await requestStatValue(page, "total")).toBe(baselineTotal);
@@ -282,13 +312,14 @@ test.describe("Admin Dashboard", () => {
 
     await firstRow.getByRole("checkbox").check();
     await secondRow.getByRole("checkbox").check();
-    await expect(page.getByTestId("request-selection-count")).toHaveText("2 ausgewaehlt");
+    await expect(page.getByTestId("request-selection-count")).toHaveText("2 ausgewählt");
 
     const delayedReadAction = await delayNextServerAction(page);
     try {
       await page.getByRole("button", { name: /Als gelesen/i }).click();
 
       await expect(page.getByRole("button", { name: /Wird aktualisiert/i }).first()).toBeVisible({ timeout: 10_000 });
+      await expect(page.getByRole("button", { name: /^Als ungelesen$/i })).toBeVisible();
       expect(delayedReadAction.wasIntercepted()).toBe(true);
       expect(await getContactRequestReadState(firstRequest.id)).toBe(false);
       expect(await getContactRequestReadState(secondRequest.id)).toBe(false);
@@ -301,17 +332,18 @@ test.describe("Admin Dashboard", () => {
       await delayedReadAction.dispose();
     }
 
-    await expect(page.getByTestId("request-selection-count")).toHaveText("0 ausgewaehlt");
+    await expect(page.getByTestId("request-selection-count")).toHaveText("0 ausgewählt");
 
     await firstRow.getByRole("checkbox").check();
     await secondRow.getByRole("checkbox").check();
-    await expect(page.getByTestId("request-selection-count")).toHaveText("2 ausgewaehlt");
+    await expect(page.getByTestId("request-selection-count")).toHaveText("2 ausgewählt");
 
     const delayedUnreadAction = await delayNextServerAction(page);
     try {
       await page.getByRole("button", { name: /Als ungelesen/i }).click();
 
       await expect(page.getByRole("button", { name: /Wird aktualisiert/i }).first()).toBeVisible({ timeout: 10_000 });
+      await expect(page.getByRole("button", { name: /^Als gelesen$/i })).toBeVisible();
       expect(delayedUnreadAction.wasIntercepted()).toBe(true);
       expect(await getContactRequestReadState(firstRequest.id)).toBe(true);
       expect(await getContactRequestReadState(secondRequest.id)).toBe(true);
@@ -324,7 +356,7 @@ test.describe("Admin Dashboard", () => {
       await delayedUnreadAction.dispose();
     }
 
-    await expect(page.getByTestId("request-selection-count")).toHaveText("0 ausgewaehlt");
+    await expect(page.getByTestId("request-selection-count")).toHaveText("0 ausgewählt");
   });
 
   test("Bulk-Loeschen entfernt Anfragen und Zaehler erst nach erfolgreichem Abschluss", async ({ page }) => {
@@ -348,14 +380,40 @@ test.describe("Admin Dashboard", () => {
 
     await firstRow.getByRole("checkbox").check();
     await secondRow.getByRole("checkbox").check();
-    await expect(page.getByTestId("request-selection-count")).toHaveText("2 ausgewaehlt");
-    await page.getByRole("button", { name: /Auswahl loeschen/i }).click();
+    await expect(page.getByTestId("request-selection-count")).toHaveText("2 ausgewählt");
+    const bulkDeleteButton = page.getByRole("button", { name: /^Auswahl löschen$/i });
+    const bulkActions = page.getByTestId("request-bulk-actions");
+    const baselineBox = await bulkActions.boundingBox();
+    const baselineDeleteButtonBox = await bulkDeleteButton.boundingBox();
+
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      await bulkDeleteButton.click();
+      await expect(page.getByRole("button", { name: /^Auswahl endgültig löschen$/i })).toBeVisible();
+      const cancelBulkDeleteButton = page.getByRole("button", { name: /^Abbrechen$/i });
+      await expect(cancelBulkDeleteButton).toBeVisible();
+      expectStableBoundingBox(await bulkActions.boundingBox(), baselineBox);
+      expectStableRightEdge(await cancelBulkDeleteButton.boundingBox(), baselineDeleteButtonBox);
+
+      await cancelBulkDeleteButton.click();
+      await expect(bulkDeleteButton).toBeVisible();
+      expectStableBoundingBox(await bulkActions.boundingBox(), baselineBox);
+      expectStableRightEdge(await bulkDeleteButton.boundingBox(), baselineDeleteButtonBox);
+    }
+
+    await bulkDeleteButton.click();
+    await expect(page.getByRole("button", { name: /^Auswahl endgültig löschen$/i })).toBeVisible();
+    const cancelBulkDeleteButton = page.getByRole("button", { name: /^Abbrechen$/i });
+    await expect(cancelBulkDeleteButton).toBeVisible();
+    expectStableBoundingBox(await bulkActions.boundingBox(), baselineBox);
+    expectStableRightEdge(await cancelBulkDeleteButton.boundingBox(), baselineDeleteButtonBox);
 
     const delayedDeleteAction = await delayNextServerAction(page);
     try {
-      await page.getByRole("button", { name: /Auswahl endgueltig loeschen/i }).click();
+      await page.getByRole("button", { name: /^Auswahl endgültig löschen$/i }).click();
 
-      await expect(page.getByRole("button", { name: /Wird geloescht/i })).toBeDisabled({ timeout: 10_000 });
+      const pendingBulkDeleteButton = page.getByRole("button", { name: /Wird gelöscht/i }).first();
+      await expect(pendingBulkDeleteButton).toBeDisabled({ timeout: 10_000 });
+      expectStableRightEdge(await pendingBulkDeleteButton.boundingBox(), baselineDeleteButtonBox);
       expect(delayedDeleteAction.wasIntercepted()).toBe(true);
       expect(await getContactRequestById(firstRequest.id)).not.toBe(null);
       expect(await getContactRequestById(secondRequest.id)).not.toBe(null);
