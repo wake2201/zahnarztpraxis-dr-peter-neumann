@@ -33,11 +33,12 @@ export default function DatenschutzPage() {
               1. Verantwortlicher
             </h2>
             <p className="text-slate-600 leading-relaxed">
-              Verantwortlich für die Datenverarbeitung auf dieser Website ist:
+              Verantwortlich f&uuml;r die Datenverarbeitung auf dieser Website ist:
               <br />
               {practice.fullName}
               <br />
-              {practice.address.street}<br />
+              {practice.address.street}
+              <br />
               {practice.address.lineTwo}
               <br />
               Telefon: {practice.phone.display}
@@ -49,16 +50,20 @@ export default function DatenschutzPage() {
               2. Erhebung und Speicherung personenbezogener Daten
             </h2>
             <p className="text-slate-600 leading-relaxed">
-              Beim Besuch unserer Website werden automatisch Informationen
-              allgemeiner Natur erfasst (sog. Server-Logfiles). Diese umfassen
-              den Browsertyp/-version, das verwendete Betriebssystem, die
-              Referrer-URL, den Hostnamen des zugreifenden Rechners sowie die
-              Uhrzeit der Serveranfrage.
+              Beim technischen Betrieb unserer Website werden nur solche Daten
+              verarbeitet, die f&uuml;r die Auslieferung der Inhalte, die
+              Stabilit&auml;t des Systems und den Schutz vor Missbrauch
+              erforderlich sind. Dazu k&ouml;nnen insbesondere Zeitpunkt des
+              Zugriffs, angeforderte Pfade und sicherheitsrelevante technische
+              Verbindungsdaten geh&ouml;ren.
             </p>
             <p className="text-slate-600 leading-relaxed mt-2">
-              Diese Daten sind nicht bestimmten Personen zuordenbar. Eine
-              Zusammenführung dieser Daten mit anderen Datenquellen wird nicht
-              vorgenommen.
+              Eine Nutzung zu Tracking-, Profiling- oder Werbezwecken findet
+              nicht statt. Fehler- und Sicherheitsprotokolle werden auf das
+              erforderliche Ma&szlig; begrenzt; insbesondere werden keine
+              Inhalte aus dem Kontaktformular, keine vollst&auml;ndigen
+              Browser-Stacks und keine vollst&auml;ndigen Ger&auml;tekennungen
+              zu Diagnosezwecken protokolliert.
             </p>
           </section>
 
@@ -67,20 +72,23 @@ export default function DatenschutzPage() {
               3. Kontaktformular
             </h2>
             <p className="text-slate-600 leading-relaxed">
-              Wenn Sie uns über das Kontaktformular Anfragen zukommen lassen,
+              Wenn Sie uns &uuml;ber das Kontaktformular Anfragen zukommen lassen,
               werden Ihre Angaben aus dem Formular (Vorname, Nachname,
-              Telefonnummer, Anliegen) inklusive der von Ihnen dort angegebenen
-              Kontaktdaten zwecks Bearbeitung der Anfrage und für den Fall von
-              Anschlussfragen bei uns gespeichert.
+              Telefonnummer, Anliegen sowie optional Ihre bevorzugte
+              Erreichbarkeit und zus&auml;tzliche Informationen) inklusive der
+              von Ihnen dort angegebenen Kontaktdaten zwecks Bearbeitung der
+              Anfrage und f&uuml;r den Fall von Anschlussfragen bei uns
+              gespeichert.
             </p>
             <p className="text-slate-600 leading-relaxed mt-2">
               <strong>Rechtsgrundlage:</strong> Art. 6 Abs. 1 lit. a DSGVO
-              (Einwilligung). Sie können Ihre Einwilligung jederzeit widerrufen.
+              (Einwilligung). Sie k&ouml;nnen Ihre Einwilligung jederzeit
+              widerrufen.
             </p>
             <p className="text-slate-600 leading-relaxed mt-2">
-              <strong>Speicherdauer:</strong> Ihre Daten werden gelöscht,
-              sobald Ihre Anfrage abschließend bearbeitet wurde, es sei denn,
-              es bestehen gesetzliche Aufbewahrungspflichten.
+              <strong>Speicherdauer:</strong> Ihre Daten werden gel&ouml;scht,
+              sobald Ihre Anfrage abschlie&szlig;end bearbeitet wurde, es sei
+              denn, es bestehen gesetzliche Aufbewahrungspflichten.
             </p>
           </section>
 
@@ -89,10 +97,15 @@ export default function DatenschutzPage() {
               4. Cookies
             </h2>
             <p className="text-slate-600 leading-relaxed">
-              Diese Website verwendet ausschließlich technisch notwendige
-              Cookies, die für den ordnungsgemäßen Betrieb der Website
-              erforderlich sind. Es werden keine Tracking-Cookies oder Cookies
-              von Drittanbietern eingesetzt.
+              Diese Website verwendet ausschlie&szlig;lich technisch notwendige
+              Cookies, die f&uuml;r den ordnungsgem&auml;&szlig;en Betrieb der
+              Website erforderlich sind. Es werden keine Tracking-Cookies oder
+              Cookies von Drittanbietern eingesetzt.
+            </p>
+            <p className="text-slate-600 leading-relaxed mt-2">
+              Der eingeblendete Datenschutzhinweis dient nur der Information und
+              speichert keine Auswahl dauerhaft im Browser, insbesondere weder
+              per Cookie noch per <code>localStorage</code>.
             </p>
           </section>
 
@@ -101,10 +114,11 @@ export default function DatenschutzPage() {
               5. Keine externen Dienste
             </h2>
             <p className="text-slate-600 leading-relaxed">
-              Diese Website lädt keine externen Ressourcen wie Google Fonts,
+              Diese Website l&auml;dt keine externen Ressourcen wie Google Fonts,
               Google Analytics oder andere Tracking-Dienste. Alle Schriften
-              werden lokal gehostet, um Ihre Privatsphäre bestmöglich zu
-              schützen.
+              werden lokal gehostet. Es findet keine unn&ouml;tige
+              Wiedererkennung, kein Fingerprinting und keine personenbezogene
+              Protokollierung zu Marketingzwecken statt.
             </p>
           </section>
 
@@ -116,19 +130,17 @@ export default function DatenschutzPage() {
               Sie haben jederzeit das Recht auf:
             </p>
             <ul className="list-disc list-inside text-slate-600 mt-2 space-y-1">
-              <li>Auskunft über Ihre gespeicherten Daten (Art. 15 DSGVO)</li>
+              <li>Auskunft &uuml;ber Ihre gespeicherten Daten (Art. 15 DSGVO)</li>
               <li>Berichtigung unrichtiger Daten (Art. 16 DSGVO)</li>
-              <li>Löschung Ihrer Daten (Art. 17 DSGVO)</li>
-              <li>
-                Einschränkung der Verarbeitung (Art. 18 DSGVO)
-              </li>
-              <li>Datenübertragbarkeit (Art. 20 DSGVO)</li>
+              <li>L&ouml;schung Ihrer Daten (Art. 17 DSGVO)</li>
+              <li>Einschr&auml;nkung der Verarbeitung (Art. 18 DSGVO)</li>
+              <li>Daten&uuml;bertragbarkeit (Art. 20 DSGVO)</li>
               <li>Widerspruch gegen die Verarbeitung (Art. 21 DSGVO)</li>
             </ul>
             <p className="text-slate-600 leading-relaxed mt-3">
-              Zur Ausübung Ihrer Rechte können Sie uns unter den oben genannten
-              Kontaktdaten erreichen. Zudem steht Ihnen ein Beschwerderecht bei
-              der zuständigen Aufsichtsbehörde zu.
+              Zur Aus&uuml;bung Ihrer Rechte k&ouml;nnen Sie uns unter den oben
+              genannten Kontaktdaten erreichen. Zudem steht Ihnen ein
+              Beschwerderecht bei der zust&auml;ndigen Aufsichtsbeh&ouml;rde zu.
             </p>
           </section>
         </div>
