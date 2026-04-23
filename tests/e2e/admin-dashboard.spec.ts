@@ -1,4 +1,4 @@
-import { test, expect, Page } from "@playwright/test";
+import { test, expect, Page, Route } from "@playwright/test";
 import {
   cleanupLoginAttempts,
   cleanupTestContactRequests,
@@ -74,6 +74,38 @@ function userRow(page: Page, email: string) {
   return page.locator("div.px-6.py-4").filter({ has: page.getByText(email) }).first();
 }
 
+async function requestStatValue(page: Page, kind: "total" | "unread" | "done") {
+  const testId = kind === "total"
+    ? "request-stat-total"
+    : kind === "unread"
+      ? "request-stat-unread"
+      : "request-stat-done";
+  const value = await page.getByTestId(testId).locator("p.text-2xl").textContent();
+  return Number(value?.trim() || "0");
+}
+
+async function delayNextServerAction(page: Page, delayMs = 1_200) {
+  let intercepted = false;
+
+  const handler = async (route: Route) => {
+    const request = route.request();
+
+    if (!intercepted && request.method() === "POST" && request.headers()["next-action"]) {
+      intercepted = true;
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+
+    await route.continue();
+  };
+
+  await page.route("**/*", handler);
+
+  return {
+    wasIntercepted: () => intercepted,
+    dispose: async () => page.unroute("**/*", handler),
+  };
+}
+
 test.describe("Admin Dashboard", () => {
   test.beforeAll(async () => {
     await cleanupLoginAttempts();
@@ -93,14 +125,14 @@ test.describe("Admin Dashboard", () => {
   test("Dashboard zeigt Statistik-Karten und Anfragen-Tab", async ({ page }) => {
     await loginAsAdmin(page);
 
-    await expect(page.getByText("Gesamt")).toBeVisible();
-    await expect(page.getByText("Ungelesen")).toBeVisible();
-    await expect(page.getByText("Erledigt")).toBeVisible();
+    await expect(page.getByText("Gesamt", { exact: true })).toBeVisible();
+    await expect(page.getByText("Ungelesen", { exact: true })).toBeVisible();
+    await expect(page.getByText("Erledigt", { exact: true })).toBeVisible();
     await expect(page.getByText("Patientenanfragen")).toBeVisible();
     await expect(page.getByText("DSGVO-Hinweis")).toBeVisible();
   });
 
-  test("Admin sieht Benutzer- und Aktivitätslog-Tabs", async ({ page }) => {
+  test("Admin sieht Benutzer- und Aktivitaetslog-Tabs", async ({ page }) => {
     await loginAsAdmin(page);
 
     const usersTab = page.getByRole("button", { name: /Benutzer/i });
@@ -116,7 +148,7 @@ test.describe("Admin Dashboard", () => {
     await expect(page.getByText(/Letzte 100 Aktionen/i)).toBeVisible();
   });
 
-  test("Mitarbeiter erstellen und löschen", async ({ page }) => {
+  test("Mitarbeiter erstellen und loeschen", async ({ page }) => {
     await loginAsAdmin(page);
     await openUsersTab(page);
 
@@ -135,7 +167,7 @@ test.describe("Admin Dashboard", () => {
     await expect(page.getByText(CREATED_STAFF_EMAIL)).toBeVisible();
 
     await page.getByRole("button", { name: /Entfernen/i }).last().click();
-    await page.getByRole("button", { name: /Bestätigen/i }).click();
+    await page.getByRole("button", { name: /Bestaetigen|Bestätigen/i }).click();
 
     await page.waitForTimeout(2_000);
     await page.reload();
@@ -150,7 +182,9 @@ test.describe("Admin Dashboard", () => {
     await expect(page).toHaveURL(/\/admin\/login/, { timeout: 10_000 });
   });
 
-  test("Anfrage-Status bleibt nach Reload korrekt gespeichert", async ({ page }) => {
+  test("Anfrage-Status aktualisiert Liste und Zaehler erst nach erfolgreichem Abschluss", async ({ page }) => {
+    await cleanupTestContactRequests();
+
     const request = await createTestContactRequest({
       message: `E2E-Test Toggle ${Date.now()}`,
       read: false,
@@ -160,9 +194,24 @@ test.describe("Admin Dashboard", () => {
 
     const row = requestRow(page, request.message);
     await expect(row.getByText(request.message)).toBeVisible();
-    await row.getByRole("button", { name: /Gelesen/i }).click();
+    const baselineUnread = await requestStatValue(page, "unread");
+    expect(baselineUnread).toBeGreaterThanOrEqual(1);
 
-    await expect.poll(async () => getContactRequestReadState(request.id)).toBe(true);
+    const delayedAction = await delayNextServerAction(page);
+    try {
+      await row.getByRole("button", { name: /Gelesen/i }).click();
+
+      await expect(row.getByRole("button", { name: /Wird aktualisiert/i })).toBeDisabled({ timeout: 10_000 });
+      expect(delayedAction.wasIntercepted()).toBe(true);
+      expect(await getContactRequestReadState(request.id)).toBe(false);
+      expect(await requestStatValue(page, "unread")).toBe(baselineUnread);
+
+      await expect.poll(async () => getContactRequestReadState(request.id)).toBe(true);
+      await expect.poll(async () => requestStatValue(page, "unread")).toBe(baselineUnread - 1);
+      await expect(row.getByRole("button", { name: /Ungelesen/i })).toBeVisible({ timeout: 10_000 });
+    } finally {
+      await delayedAction.dispose();
+    }
 
     await page.reload();
     await expect(page.getByRole("button", { name: /Abmelden/i })).toBeVisible({ timeout: 15_000 });
@@ -171,7 +220,9 @@ test.describe("Admin Dashboard", () => {
     await expect(reloadedRow.getByRole("button", { name: /Ungelesen/i })).toBeVisible();
   });
 
-  test("Anfrage löschen erzeugt Audit-Log und entfernt den Datensatz", async ({ page }) => {
+  test("Einzelnes Loeschen entfernt Anfrage und Zaehler erst nach erfolgreichem Abschluss", async ({ page }) => {
+    await cleanupTestContactRequests();
+
     const request = await createTestContactRequest({
       message: `E2E-Test Delete ${Date.now()}`,
     });
@@ -180,20 +231,151 @@ test.describe("Admin Dashboard", () => {
 
     const row = requestRow(page, request.message);
     await expect(row.getByText(request.message)).toBeVisible();
-    await row.getByRole("button", { name: /Löschen/i }).click();
-    await page.getByRole("button", { name: /Endgültig löschen/i }).click();
+    const baselineTotal = await requestStatValue(page, "total");
+    expect(baselineTotal).toBeGreaterThanOrEqual(1);
 
-    await expect.poll(async () => getContactRequestById(request.id)).toBe(null);
-    await expect.poll(async () => {
-      return Boolean(await findLatestAuditLogByActionAndDetail("DELETE_REQUEST", request.id));
-    }).toBe(true);
+    await row.getByRole("button", { name: /Loeschen|Löschen/i }).click();
+
+    const delayedAction = await delayNextServerAction(page);
+    try {
+      await page.getByRole("button", { name: /Endgueltig loeschen|Endgültig löschen/i }).click();
+
+      await expect(page.getByRole("button", { name: /Wird geloescht/i })).toBeDisabled({ timeout: 10_000 });
+      expect(delayedAction.wasIntercepted()).toBe(true);
+      expect(await getContactRequestById(request.id)).not.toBe(null);
+      expect(await requestStatValue(page, "total")).toBe(baselineTotal);
+
+      await expect.poll(async () => getContactRequestById(request.id)).toBe(null);
+      await expect.poll(async () => requestStatValue(page, "total")).toBe(baselineTotal - 1);
+      await expect.poll(async () => {
+        return Boolean(await findLatestAuditLogByActionAndDetail("DELETE_REQUEST", request.id));
+      }).toBe(true);
+    } finally {
+      await delayedAction.dispose();
+    }
 
     await page.reload();
     await expect(page.getByRole("button", { name: /Abmelden/i })).toBeVisible({ timeout: 15_000 });
     await expect(page.getByText(request.message)).toBeHidden();
   });
 
-  test("Server-seitige Zod-Validierung blockiert ungültige E-Mail trotz noValidate", async ({ page }) => {
+  test("Bulk gelesen und ungelesen aktualisiert Liste und Zaehler erst nach erfolgreichem Abschluss", async ({ page }) => {
+    await cleanupTestContactRequests();
+
+    const firstRequest = await createTestContactRequest({
+      message: `E2E-Test Bulk Toggle A ${Date.now()}`,
+      read: false,
+    });
+    const secondRequest = await createTestContactRequest({
+      message: `E2E-Test Bulk Toggle B ${Date.now()}`,
+      read: false,
+    });
+
+    await loginAsAdmin(page);
+
+    const firstRow = requestRow(page, firstRequest.message);
+    const secondRow = requestRow(page, secondRequest.message);
+    await expect(firstRow).toBeVisible({ timeout: 10_000 });
+    await expect(secondRow).toBeVisible({ timeout: 10_000 });
+    const baselineUnread = await requestStatValue(page, "unread");
+    expect(baselineUnread).toBeGreaterThanOrEqual(2);
+
+    await firstRow.getByRole("checkbox").check();
+    await secondRow.getByRole("checkbox").check();
+    await expect(page.getByTestId("request-selection-count")).toHaveText("2 ausgewaehlt");
+
+    const delayedReadAction = await delayNextServerAction(page);
+    try {
+      await page.getByRole("button", { name: /Als gelesen/i }).click();
+
+      await expect(page.getByRole("button", { name: /Wird aktualisiert/i }).first()).toBeVisible({ timeout: 10_000 });
+      expect(delayedReadAction.wasIntercepted()).toBe(true);
+      expect(await getContactRequestReadState(firstRequest.id)).toBe(false);
+      expect(await getContactRequestReadState(secondRequest.id)).toBe(false);
+      expect(await requestStatValue(page, "unread")).toBe(baselineUnread);
+
+      await expect.poll(async () => getContactRequestReadState(firstRequest.id)).toBe(true);
+      await expect.poll(async () => getContactRequestReadState(secondRequest.id)).toBe(true);
+      await expect.poll(async () => requestStatValue(page, "unread")).toBe(baselineUnread - 2);
+    } finally {
+      await delayedReadAction.dispose();
+    }
+
+    await expect(page.getByTestId("request-selection-count")).toHaveText("0 ausgewaehlt");
+
+    await firstRow.getByRole("checkbox").check();
+    await secondRow.getByRole("checkbox").check();
+    await expect(page.getByTestId("request-selection-count")).toHaveText("2 ausgewaehlt");
+
+    const delayedUnreadAction = await delayNextServerAction(page);
+    try {
+      await page.getByRole("button", { name: /Als ungelesen/i }).click();
+
+      await expect(page.getByRole("button", { name: /Wird aktualisiert/i }).first()).toBeVisible({ timeout: 10_000 });
+      expect(delayedUnreadAction.wasIntercepted()).toBe(true);
+      expect(await getContactRequestReadState(firstRequest.id)).toBe(true);
+      expect(await getContactRequestReadState(secondRequest.id)).toBe(true);
+      expect(await requestStatValue(page, "unread")).toBe(baselineUnread - 2);
+
+      await expect.poll(async () => getContactRequestReadState(firstRequest.id)).toBe(false);
+      await expect.poll(async () => getContactRequestReadState(secondRequest.id)).toBe(false);
+      await expect.poll(async () => requestStatValue(page, "unread")).toBe(baselineUnread);
+    } finally {
+      await delayedUnreadAction.dispose();
+    }
+
+    await expect(page.getByTestId("request-selection-count")).toHaveText("0 ausgewaehlt");
+  });
+
+  test("Bulk-Loeschen entfernt Anfragen und Zaehler erst nach erfolgreichem Abschluss", async ({ page }) => {
+    await cleanupTestContactRequests();
+
+    const firstRequest = await createTestContactRequest({
+      message: `E2E-Test Bulk Delete A ${Date.now()}`,
+    });
+    const secondRequest = await createTestContactRequest({
+      message: `E2E-Test Bulk Delete B ${Date.now()}`,
+    });
+
+    await loginAsAdmin(page);
+
+    const firstRow = requestRow(page, firstRequest.message);
+    const secondRow = requestRow(page, secondRequest.message);
+    await expect(firstRow).toBeVisible({ timeout: 10_000 });
+    await expect(secondRow).toBeVisible({ timeout: 10_000 });
+    const baselineTotal = await requestStatValue(page, "total");
+    expect(baselineTotal).toBeGreaterThanOrEqual(2);
+
+    await firstRow.getByRole("checkbox").check();
+    await secondRow.getByRole("checkbox").check();
+    await expect(page.getByTestId("request-selection-count")).toHaveText("2 ausgewaehlt");
+    await page.getByRole("button", { name: /Auswahl loeschen/i }).click();
+
+    const delayedDeleteAction = await delayNextServerAction(page);
+    try {
+      await page.getByRole("button", { name: /Auswahl endgueltig loeschen/i }).click();
+
+      await expect(page.getByRole("button", { name: /Wird geloescht/i })).toBeDisabled({ timeout: 10_000 });
+      expect(delayedDeleteAction.wasIntercepted()).toBe(true);
+      expect(await getContactRequestById(firstRequest.id)).not.toBe(null);
+      expect(await getContactRequestById(secondRequest.id)).not.toBe(null);
+      expect(await requestStatValue(page, "total")).toBe(baselineTotal);
+
+      await expect.poll(async () => getContactRequestById(firstRequest.id)).toBe(null);
+      await expect.poll(async () => getContactRequestById(secondRequest.id)).toBe(null);
+      await expect.poll(async () => requestStatValue(page, "total")).toBe(baselineTotal - 2);
+      await expect.poll(async () => {
+        return Boolean(await findLatestAuditLogByActionAndDetail("DELETE_REQUEST", firstRequest.id));
+      }).toBe(true);
+      await expect.poll(async () => {
+        return Boolean(await findLatestAuditLogByActionAndDetail("DELETE_REQUEST", secondRequest.id));
+      }).toBe(true);
+    } finally {
+      await delayedDeleteAction.dispose();
+    }
+  });
+
+  test("Server-seitige Zod-Validierung blockiert ungueltige E-Mail trotz noValidate", async ({ page }) => {
     const invalidEmail = `ungueltig-email-${Date.now()}`;
 
     await loginAsAdmin(page);
@@ -243,7 +425,7 @@ test.describe("Admin Dashboard", () => {
 
     const row = userRow(page, PROMOTED_STAFF_EMAIL);
     await row.getByRole("button", { name: /Entfernen/i }).click();
-    await page.getByRole("button", { name: /Bestätigen/i }).click();
+    await page.getByRole("button", { name: /Bestaetigen|Bestätigen/i }).click();
 
     await expect(page.getByText("Admin-Accounts können nicht gelöscht werden.")).toBeVisible({ timeout: 10_000 });
     await expect.poll(async () => userExistsByEmail(PROMOTED_STAFF_EMAIL)).toBe(true);
@@ -254,7 +436,7 @@ test.describe("Admin Dashboard", () => {
     await expect(page.getByText(PROMOTED_STAFF_EMAIL)).toBeVisible();
   });
 
-  test("Aktivitätslog bietet keine destructive Clear-Aktion", async ({ page }) => {
+  test("Aktivitaetslog bietet keine destructive Clear-Aktion", async ({ page }) => {
     const snapshot = await snapshotAuditLogs();
     const logDetails = `E2E-Test Log Seed ${Date.now()}`;
     await createTestAuditLog({

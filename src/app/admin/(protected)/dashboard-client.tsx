@@ -30,6 +30,11 @@ export function AdminDashboardClient({
   const isAdmin = userRole === "admin";
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<DashboardTab>("requests");
+  const [requestItems, setRequestItems] = useState(requests);
+
+  useEffect(() => {
+    setRequestItems(requests);
+  }, [requests]);
 
   useEffect(() => {
     if (!isAdmin && activeTab !== "requests") {
@@ -49,7 +54,7 @@ export function AdminDashboardClient({
     return () => clearInterval(interval);
   }, [router]);
 
-  const unread = requests.filter((request) => !request.read).length;
+  const unread = requestItems.filter((request) => !request.read).length;
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -99,7 +104,7 @@ export function AdminDashboardClient({
       </header>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {activeTab === "requests" && <RequestsTab requests={requests} />}
+        {activeTab === "requests" && <RequestsTab requests={requestItems} onRequestsChange={setRequestItems} />}
         {activeTab === "users" && isAdmin && <UsersTab users={users} />}
         {activeTab === "logs" && isAdmin && <LogsTab auditLogs={auditLogs} />}
       </main>

@@ -3,8 +3,7 @@
 export {
   submitContactForm,
   getContactRequests,
-  toggleReadStatus,
-  deleteContactRequest,
+  mutateContactRequests,
 } from "./actions/contact";
 
 export {

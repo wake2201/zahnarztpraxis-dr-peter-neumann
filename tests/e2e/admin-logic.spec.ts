@@ -7,6 +7,7 @@ import {
   disconnectPrisma,
   ensureTestUser,
   getContactRequestById,
+  getContactRequestReadState,
   updateUserRoleByEmail,
 } from "./helpers/db-cleanup";
 
@@ -114,6 +115,8 @@ test.describe("Admin Logic Corrections", () => {
   });
 
   test("Fehlgeschlagene Anfrage-Aktion entfernt stale UI nach Refresh und zeigt den Fehler an", async ({ page }) => {
+    await cleanupTestContactRequests();
+
     const request = await createTestContactRequest({
       message: `E2E-Stale-Request ${Date.now()}`,
       read: false,
@@ -131,8 +134,8 @@ test.describe("Admin Logic Corrections", () => {
 
       const activeRow = requestRows(secondPage, request.message).first();
       await expect(activeRow).toBeVisible({ timeout: 10_000 });
-      await activeRow.getByRole("button", { name: /Löschen/i }).click();
-      await secondPage.getByRole("button", { name: /Endgültig löschen/i }).click();
+      await activeRow.getByRole("button", { name: /Loeschen|Löschen/i }).click();
+      await secondPage.getByRole("button", { name: /Endgueltig loeschen|Endgültig löschen/i }).click();
 
       await expect.poll(async () => getContactRequestById(request.id)).toBe(null);
     } finally {
@@ -143,6 +146,53 @@ test.describe("Admin Logic Corrections", () => {
 
     await expect(page.getByText("Anfrage nicht gefunden.")).toBeVisible({ timeout: 10_000 });
     await expect(requestRows(page, request.message)).toHaveCount(0, { timeout: 10_000 });
+  });
+
+  test("Bulk-Aktion bleibt atomar, wenn eine ausgewaehlte Anfrage stale ist", async ({ page }) => {
+    await cleanupTestContactRequests();
+
+    const firstRequest = await createTestContactRequest({
+      message: `E2E-Stale-Bulk A ${Date.now()}`,
+      read: false,
+    });
+    const secondRequest = await createTestContactRequest({
+      message: `E2E-Stale-Bulk B ${Date.now()}`,
+      read: false,
+    });
+
+    await loginAs(page, ADMIN_EMAIL, ADMIN_PASSWORD);
+
+    const firstRow = requestRows(page, firstRequest.message).first();
+    const secondRow = requestRows(page, secondRequest.message).first();
+    await expect(firstRow).toBeVisible({ timeout: 10_000 });
+    await expect(secondRow).toBeVisible({ timeout: 10_000 });
+
+    await firstRow.getByRole("checkbox").check();
+    await secondRow.getByRole("checkbox").check();
+    await expect(page.getByTestId("request-selection-count")).toHaveText("2 ausgewaehlt");
+
+    const secondPage = await page.context().newPage();
+    try {
+      await secondPage.goto("/admin");
+      await expect(secondPage.getByRole("button", { name: /Abmelden/i })).toBeVisible({ timeout: 15_000 });
+
+      const staleRow = requestRows(secondPage, secondRequest.message).first();
+      await expect(staleRow).toBeVisible({ timeout: 10_000 });
+      await staleRow.getByRole("button", { name: /Loeschen|Löschen/i }).click();
+      await secondPage.getByRole("button", { name: /Endgueltig loeschen|Endgültig löschen/i }).click();
+
+      await expect.poll(async () => getContactRequestById(secondRequest.id)).toBe(null);
+    } finally {
+      await secondPage.close();
+    }
+
+    await page.getByRole("button", { name: /Als gelesen/i }).click();
+
+    await expect(page.getByText("Anfrage nicht gefunden.")).toBeVisible({ timeout: 10_000 });
+    await expect.poll(async () => getContactRequestReadState(firstRequest.id)).toBe(false);
+    await expect(requestRows(page, secondRequest.message)).toHaveCount(0, { timeout: 10_000 });
+    await expect(requestRows(page, firstRequest.message).first()).toBeVisible({ timeout: 10_000 });
+    await expect(requestRows(page, firstRequest.message).first().getByRole("button", { name: /Gelesen/i })).toBeVisible({ timeout: 10_000 });
   });
 
   test("Rollenverlust auf einem privilegierten Tab springt beim naechsten Refresh sauber auf Anfragen zurueck", async ({ page }) => {

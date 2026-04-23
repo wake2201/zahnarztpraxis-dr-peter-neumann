@@ -148,10 +148,26 @@ export const actionIdSchema = z.preprocess(
 
 export const actionCursorSchema = actionIdSchema.optional();
 
-export const toggleReadStatusSchema = z.object({
-  id: actionIdSchema,
-  newReadStatus: z.boolean(),
-});
+const CONTACT_REQUEST_MUTATION_ACTIONS = ["markRead", "markUnread", "delete"] as const;
+const MAX_CONTACT_REQUEST_MUTATION_IDS = 50;
+
+export const contactRequestMutationSchema = z
+  .object({
+    ids: z
+      .array(actionIdSchema)
+      .min(1, ERROR_MESSAGES.invalidInput)
+      .max(MAX_CONTACT_REQUEST_MUTATION_IDS, ERROR_MESSAGES.invalidInput)
+      .superRefine((ids, ctx) => {
+        if (new Set(ids).size !== ids.length) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: ERROR_MESSAGES.invalidInput,
+          });
+        }
+      }),
+    action: z.enum(CONTACT_REQUEST_MUTATION_ACTIONS),
+  })
+  .strict();
 
 export const clientErrorLogSchema = z
   .object({

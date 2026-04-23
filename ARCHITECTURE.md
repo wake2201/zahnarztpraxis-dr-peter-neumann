@@ -178,7 +178,10 @@ Wichtige Schemas:
   - `honeypot` begrenzt und optional
 - `createUserSchema`
 - `actionIdSchema`
-- `toggleReadStatusSchema`
+- `contactRequestMutationSchema`
+  - `ids` als nicht-leeres, eindeutiges Array von Action-IDs
+  - maximal 50 IDs pro Mutation
+  - `action` als Enum-Whitelist: `markRead | markUnread | delete`
 - `clientErrorLogSchema`
 
 ### Kontaktformular-Lifecycle
@@ -199,6 +202,17 @@ Wichtige Schemas:
 - Kontaktanfragen sind fuer `admin` und `staff` sichtbar
 - Benutzer und Audit-Logs sind nur fuer `admin` sichtbar
 - Teilabfragen werden mit `Promise.allSettled(...)` geladen, damit ein Teilfehler nicht das gesamte Dashboard unnoetig blockiert
+- `dashboard-client.tsx` haelt die aktuelle Request-Liste als gemeinsame Client-Quelle fuer Tab-Badge, Zaehlerkarten und Requests-Tab
+- Einzel- und Sammelaktionen fuer Kontaktanfragen laufen ueber denselben Client/Server-Mutationspfad
+- Request-Liste und Request-Zaehler werden erst nach bestaetigtem Mutationserfolg aktualisiert; fehlgeschlagene Aktionen refreshen zurueck auf Server-Wahrheit
+
+### Request-Management-Verhalten
+
+- `mutateContactRequests()` ist der einzige Mutationseinstieg fuer einzelne und mehrere Kontaktanfragen
+- Derselbe Mechanismus deckt einzelnes Lesen/Ungelesen, einzelnes Loeschen sowie Bulk-Lesen, Bulk-Ungelesen und Bulk-Loeschen ab
+- Betroffene Requests zeigen waehrend laufender Mutationen einen Ladezustand; geloeschte Zeilen bleiben bis zum erfolgreichen Abschluss sichtbar und verschwinden erst danach
+- Bulk-Mutationen sind atomar: ist eine ausgewaehlte Anfrage stale oder fehlt, wird nichts teilweise aktualisiert oder geloescht
+- Erfolgreiche Delete-Mutationen schreiben pro geloeschter Anfrage einen `DELETE_REQUEST`-Audit-Log-Eintrag innerhalb derselben Transaktion
 
 ### Aktuelle Server Actions
 
@@ -213,8 +227,7 @@ Wichtige Schemas:
 | Funktion | Input | Output | Bemerkung |
 | --- | --- | --- | --- |
 | `getContactRequests()` | optionaler Cursor | `ContactRequest[]` | sortiert nach `createdAt desc` |
-| `toggleReadStatus()` | `id`, `newReadStatus` | `{ success, error? }` | direktes Setzen des Zielstatus |
-| `deleteContactRequest()` | `id` | `{ success, error? }` | transaktional mit Audit-Log |
+| `mutateContactRequests()` | `{ ids, action }` | `{ success, error? }` | einheitliche transaktionale Mutation fuer Einzel- und Sammelaktionen; aktualisiert oder loescht atomar, schreibt Delete-Audit-Logs pro Request und revalidiert `/admin` nach Erfolg |
 
 #### Admin-only (`requireAdmin()`)
 
@@ -397,6 +410,7 @@ Aktueller Datenschutzstatus:
 - Login, Lockout und Fehlerszenarien
 - Kontaktformular inkl. Honeypot und serverseitiger Validierung
 - Admin-Dashboard, Benutzerverwaltung und Rollen-Sichtbarkeit
+- Request-Management mit completion-coupled Einzel-/Bulk-Aktionen, sichtbaren Pending-Zustaenden, UI-Refresh bei Fehlschlag und atomarem Bulk-Failure-Verhalten
 - Security-Haertung des Client-Error-Endpunkts
 - UI-Rollback nach fehlgeschlagenen Server Actions
 

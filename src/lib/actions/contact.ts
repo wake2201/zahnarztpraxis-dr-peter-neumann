@@ -7,10 +7,9 @@ import { publicContent } from "@/content/data";
 import { prisma } from "../prisma";
 import {
   actionCursorSchema,
-  actionIdSchema,
+  contactRequestMutationSchema,
   contactFormSchema,
   ERROR_MESSAGES,
-  toggleReadStatusSchema,
 } from "../schemas";
 import { checkRateLimitDb, cleanupExpiredRateLimits } from "../rate-limit";
 import { logger } from "../logger";
@@ -19,6 +18,8 @@ import { requireAuth } from "./auth-helpers";
 
 const MAX_REQUESTS_PER_PAGE = 50;
 type ContactFormData = z.output<typeof contactFormSchema>;
+
+class ContactRequestMutationNotFoundError extends Error {}
 
 function buildContactMessage(data: ContactFormData) {
   const requestTypeLabel =
@@ -114,83 +115,63 @@ export async function getContactRequests(cursor?: string) {
 }
 
 /**
- * Der gewuenschte Status wird vom Client uebergeben.
- * Die Datenbank schreibt direkt den Zielzustand und vermeidet ein read-modify-write-Rennen.
+ * Einheitlicher Mutationseinstieg fuer Einzel- und Sammelaktionen.
+ * Alle Kontaktanfragen werden atomar aktualisiert oder geloescht.
  */
-export async function toggleReadStatus(id: string, newReadStatus: boolean) {
-  await requireAuth();
-
-  const parsed = toggleReadStatusSchema.safeParse({ id, newReadStatus });
-  if (!parsed.success) {
-    return { success: false, error: ERROR_MESSAGES.invalidInput };
-  }
-
-  try {
-    const updatedCount = await prisma.$transaction(async (tx) => {
-      const updated = await tx.contactRequest.updateMany({
-        where: { id: parsed.data.id },
-        data: { read: parsed.data.newReadStatus },
-      });
-      return updated.count;
-    });
-
-    if (updatedCount === 0) {
-      return { success: false, error: ERROR_MESSAGES.requestNotFound };
-    }
-
-    revalidatePath("/admin");
-    return { success: true };
-  } catch (error) {
-    logger.error(
-      { err: error, action: "toggleReadStatus", requestId: parsed.data.id },
-      "[toggleReadStatus] fehlgeschlagen",
-    );
-    return { success: false, error: ERROR_MESSAGES.statusUpdateFailed };
-  }
-}
-
-/**
- * DSGVO Art. 17 - Recht auf Loeschung. Audit-Log + Delete bleiben atomar.
- */
-export async function deleteContactRequest(id: string) {
+export async function mutateContactRequests(input: z.input<typeof contactRequestMutationSchema>) {
   const session = await requireAuth();
-  const parsed = actionIdSchema.safeParse(id);
+  const parsed = contactRequestMutationSchema.safeParse(input);
   if (!parsed.success) {
     return { success: false, error: ERROR_MESSAGES.invalidInput };
   }
 
   try {
-    const deleted = await prisma.$transaction(async (tx) => {
-      const deleteResult = await tx.contactRequest.deleteMany({
-        where: { id: parsed.data },
-      });
-      if (deleteResult.count === 0) {
-        return false;
+    await prisma.$transaction(async (tx) => {
+      if (parsed.data.action === "delete") {
+        const deleted = await tx.contactRequest.deleteMany({
+          where: { id: { in: parsed.data.ids } },
+        });
+
+        if (deleted.count !== parsed.data.ids.length) {
+          throw new ContactRequestMutationNotFoundError();
+        }
+
+        await tx.auditLog.createMany({
+          data: parsed.data.ids.map((id) => ({
+            userId: session.user.id,
+            userName: session.user.name || session.user.email || "Unbekannt",
+            action: "DELETE_REQUEST",
+            details: `Kontaktanfrage geloescht (ID: ${id})`,
+          })),
+        });
+
+        return;
       }
 
-      await tx.auditLog.create({
-        data: {
-          userId: session.user.id,
-          userName: session.user.name || session.user.email || "Unbekannt",
-          action: "DELETE_REQUEST",
-          details: `Kontaktanfrage geloescht (ID: ${parsed.data})`,
-        },
+      const updated = await tx.contactRequest.updateMany({
+        where: { id: { in: parsed.data.ids } },
+        data: { read: parsed.data.action === "markRead" },
       });
 
-      return true;
+      if (updated.count !== parsed.data.ids.length) {
+        throw new ContactRequestMutationNotFoundError();
+      }
     });
-
-    if (!deleted) {
-      return { success: false, error: ERROR_MESSAGES.requestNotFound };
-    }
 
     revalidatePath("/admin");
     return { success: true };
   } catch (error) {
+    if (error instanceof ContactRequestMutationNotFoundError) {
+      return { success: false, error: ERROR_MESSAGES.requestNotFound };
+    }
+
     logger.error(
-      { err: error, action: "deleteContactRequest", requestId: parsed.data },
-      "[deleteContactRequest] fehlgeschlagen",
+      { err: error, action: "mutateContactRequests", mutationAction: parsed.data.action, requestIds: parsed.data.ids },
+      "[mutateContactRequests] fehlgeschlagen",
     );
-    return { success: false, error: ERROR_MESSAGES.requestDeleteFailed };
+    return {
+      success: false,
+      error: parsed.data.action === "delete" ? ERROR_MESSAGES.requestDeleteFailed : ERROR_MESSAGES.statusUpdateFailed,
+    };
   }
 }
