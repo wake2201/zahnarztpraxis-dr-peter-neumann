@@ -214,13 +214,14 @@ export function RequestsTab({ requests, onRequestsChange }: Props) {
                 className="w-full sm:w-[34rem]"
               >
                 {bulkDeleteConfirmation ? (
-                  <div className="flex w-full flex-col items-stretch gap-2 sm:flex-row sm:justify-end">
+                  <div className="grid w-full gap-2 sm:grid-cols-3">
+                    <div aria-hidden="true" className="hidden h-9 sm:block" />
                     <Button
                       variant="destructive"
                       size="sm"
                       onClick={() => handleDelete(deleteConfirmation?.source === "bulk" ? deleteConfirmation.ids : [], "bulk")}
                       disabled={Boolean(pendingMutation)}
-                      className="h-9 w-full px-3 text-sm sm:w-auto"
+                      className="h-9 w-full px-3 text-sm transition-none sm:col-start-3 sm:row-start-1"
                     >
                       {isBulkDeletePending ? (
                         <>
@@ -239,7 +240,7 @@ export function RequestsTab({ requests, onRequestsChange }: Props) {
                         variant="outline"
                         size="sm"
                         onClick={() => setDeleteConfirmation(null)}
-                        className="h-9 w-full px-3 text-sm sm:w-auto"
+                        className="h-9 w-full px-3 text-sm transition-none sm:col-start-2 sm:row-start-1"
                       >
                         Abbrechen
                       </Button>
@@ -272,7 +273,7 @@ export function RequestsTab({ requests, onRequestsChange }: Props) {
                       size="sm"
                       onClick={handleStartBulkDelete}
                       disabled={selectedCount === 0 || Boolean(pendingMutation)}
-                      className="h-9 w-full px-3 text-sm text-red-600 hover:border-red-200 hover:bg-red-50 hover:text-red-700"
+                      className="h-9 w-full px-3 text-sm text-red-600 transition-none hover:border-red-200 hover:bg-red-50 hover:text-red-700"
                     >
                       <Trash2 className="w-4 h-4" />
                       <span className="ml-1.5">Auswahl löschen</span>
