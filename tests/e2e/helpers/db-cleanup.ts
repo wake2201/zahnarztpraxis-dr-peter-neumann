@@ -87,6 +87,29 @@ export async function countActiveLoginLocks(): Promise<number> {
   });
 }
 
+export async function countLoginAttempts(): Promise<number> {
+  return prisma.loginAttempt.count();
+}
+
+export async function getLoginAttemptIdentifiers(): Promise<string[]> {
+  const attempts = await prisma.loginAttempt.findMany({
+    select: { identifier: true },
+    orderBy: { updatedAt: "asc" },
+  });
+
+  return attempts.map((attempt) => attempt.identifier);
+}
+
+export async function ageNonLockedLoginAttempts(updatedAt: Date) {
+  await prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`
+      UPDATE login_attempts
+      SET updated_at = ${updatedAt}
+      WHERE locked_until IS NULL
+    `;
+  });
+}
+
 /**
  * Loescht alle Rate-Limit-Eintraege.
  */

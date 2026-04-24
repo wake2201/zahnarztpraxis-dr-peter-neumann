@@ -41,7 +41,7 @@ model User {
 }
 
 /// Login-Versuche für DB-basiertes Rate-Limiting.
-/// Identifier = SHA-256(IP + UserAgent) — nicht umkehrbar.
+/// Identifier = SHA-256(Bucket-Typ + IP + UserAgent + optionaler Konto-Kontext) — nicht umkehrbar.
 model LoginAttempt {
   id          String    @id @default(cuid())
   identifier  String    @unique

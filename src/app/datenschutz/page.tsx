@@ -86,9 +86,12 @@ export default function DatenschutzPage() {
               widerrufen.
             </p>
             <p className="text-slate-600 leading-relaxed mt-2">
-              <strong>Speicherdauer:</strong> Ihre Daten werden gel&ouml;scht,
-              sobald Ihre Anfrage abschlie&szlig;end bearbeitet wurde, es sei
-              denn, es bestehen gesetzliche Aufbewahrungspflichten.
+              <strong>Speicherdauer:</strong> Ihre Daten werden f&uuml;r die
+              Bearbeitung Ihrer Anfrage und m&ouml;gliche Anschlussfragen
+              gespeichert. Nach abschlie&szlig;ender Bearbeitung werden
+              Kontaktanfragen durch autorisierte Mitarbeitende manuell
+              gel&ouml;scht, sofern keine gesetzlichen Aufbewahrungspflichten
+              entgegenstehen.
             </p>
           </section>
 

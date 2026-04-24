@@ -1,10 +1,13 @@
 import { test, expect, Page } from "@playwright/test";
 import {
+  ageNonLockedLoginAttempts,
   cleanupLoginAttempts,
   cleanupUsersByEmail,
   countActiveLoginLocks,
+  countLoginAttempts,
   disconnectPrisma,
   ensureTestUser,
+  getLoginAttemptIdentifiers,
 } from "./helpers/db-cleanup";
 
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || "admin@zeitzer-zahnarzt.de";
@@ -54,6 +57,45 @@ test.describe("Admin Login & Lockout", () => {
     await expect(
       page.getByText(/Gesperrt für noch \d+ Minute/i),
     ).toBeVisible({ timeout: 10_000 });
+  });
+
+  test("LoginAttempt-Identifier enthalten keine Klartext-E-Mail", async ({ page }) => {
+    const attemptedEmail = `pii-check-${Date.now()}@test.de`;
+
+    await submitLogin(page, attemptedEmail, WRONG_PASSWORD);
+
+    await expect(
+      page.getByText("Ungültige Anmeldedaten. Bitte versuchen Sie es erneut."),
+    ).toBeVisible({ timeout: 10_000 });
+
+    const identifiers = await getLoginAttemptIdentifiers();
+    expect(identifiers).toHaveLength(2);
+
+    for (const identifier of identifiers) {
+      expect(identifier).toMatch(/^(email|ip)-[a-f0-9]{64}$/);
+      expect(identifier).not.toContain(attemptedEmail);
+      expect(identifier).not.toContain(attemptedEmail.split("@")[0]);
+    }
+  });
+
+  test("Stale nicht gesperrte LoginAttempt-Eintraege werden bereinigt", async ({ page }) => {
+    const staleEmail = `stale-login-${Date.now()}@test.de`;
+    const freshEmail = `fresh-login-${Date.now()}@test.de`;
+
+    await submitLogin(page, staleEmail, WRONG_PASSWORD);
+    await expect(
+      page.getByText("Ungültige Anmeldedaten. Bitte versuchen Sie es erneut."),
+    ).toBeVisible({ timeout: 10_000 });
+    await expect.poll(async () => countLoginAttempts()).toBe(2);
+
+    await ageNonLockedLoginAttempts(new Date(Date.now() - 16 * 60 * 1000));
+
+    await submitLogin(page, freshEmail, WRONG_PASSWORD);
+    await expect(
+      page.getByText("Ungültige Anmeldedaten. Bitte versuchen Sie es erneut."),
+    ).toBeVisible({ timeout: 10_000 });
+
+    await expect.poll(async () => countLoginAttempts(), { timeout: 10_000 }).toBe(2);
   });
 
   test("Parallele Fehlversuche triggern atomaren Lockout", async ({ context }) => {

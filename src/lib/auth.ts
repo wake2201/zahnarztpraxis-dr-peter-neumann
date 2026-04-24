@@ -8,6 +8,7 @@ import { prisma } from "./prisma";
 import { getClientIp, isTrustedClientIpError } from "./client-ip";
 
 const LOCKOUT_DURATION = 15 * 60 * 1000; // 15 Minuten
+const LOGIN_ATTEMPT_STALE_DURATION = LOCKOUT_DURATION;
 const MAX_ATTEMPTS = 3;
 const MAX_TRANSACTION_RETRIES = 3;
 const AUTH_IP_UNAVAILABLE_CODE = "AUTH_IP_UNAVAILABLE";
@@ -26,10 +27,10 @@ const DUMMY_HASH = "$2a$12$KIXbPPpZxDr9e7m1Hf4jK.0xHJ1rN8QvT5P3Ue6F7cD8bO9sL2mWe
 type NormalizedRole = "admin" | "staff";
 
 /**
- * Erzeugt einen nicht umkehrbaren Identifier aus IP + UserAgent.
+ * Erzeugt einen nicht umkehrbaren Identifier aus Bucket-Kontext.
  */
-function hashIdentifier(ip: string, userAgent: string): string {
-  return crypto.createHash("sha256").update(`${ip}::${userAgent}`).digest("hex");
+function hashIdentifier(...parts: string[]): string {
+  return crypto.createHash("sha256").update(parts.join("\0")).digest("hex");
 }
 
 export function normalizeRole(role: string | null | undefined): NormalizedRole | null {
@@ -95,9 +96,8 @@ export const authOptions: NextAuthOptions = {
         // - emailIdentifier: granular pro Account
         // - ipIdentifier: verhindert Enumerations-Bursts pro IP + UserAgent
         const userAgent = headersList.get("user-agent") || "unknown";
-        const baseHash = hashIdentifier(ip, userAgent);
-        const emailIdentifier = `${baseHash}-${email}`;
-        const ipIdentifier = `ip-${baseHash}`;
+        const emailIdentifier = `email-${hashIdentifier("login-email", ip, userAgent, email)}`;
+        const ipIdentifier = `ip-${hashIdentifier("login-ip", ip, userAgent)}`;
 
         const result = await runTransactionWithRetry(() =>
           prisma.$transaction(async (tx) => {
@@ -221,11 +221,20 @@ export const authOptions: NextAuthOptions = {
           }),
         );
 
-        // Abgelaufene Lockouts koennen im Hintergrund aufgeraeumt werden.
+        // Abgelaufene Lockouts und alte Fehlversuchs-Buckets koennen im Hintergrund
+        // aufgeraeumt werden, ohne aktive Sperren oder frische Fehlversuche zu loeschen.
         void prisma
           .$transaction(async (tx) => {
+            const now = new Date();
+            const staleAttemptCutoff = new Date(now.getTime() - LOGIN_ATTEMPT_STALE_DURATION);
+
             await tx.loginAttempt.deleteMany({
-              where: { lockedUntil: { lt: new Date() } },
+              where: {
+                OR: [
+                  { lockedUntil: { lt: now } },
+                  { lockedUntil: null, updatedAt: { lt: staleAttemptCutoff } },
+                ],
+              },
             });
           })
           .catch(() => {});

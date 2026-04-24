@@ -34,6 +34,15 @@ test.describe("Kontaktformular", () => {
     await disconnectPrisma();
   });
 
+  test("Datenschutzerklaerung beschreibt manuelle Kontaktanfragen-Loeschung", async ({ page }) => {
+    await page.goto("/datenschutz");
+
+    await expect(page.getByRole("heading", { name: "Datenschutzerklärung" })).toBeVisible();
+    await expect(
+      page.getByText(/Kontaktanfragen durch autorisierte Mitarbeitende manuell gelöscht/i),
+    ).toBeVisible();
+  });
+
   test("Formular erfolgreich absenden", async ({ page }) => {
     const firstName = `E2E-Test-${Date.now()}`;
 
