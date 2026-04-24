@@ -410,13 +410,13 @@ export function ContactForm() {
                   <p className="mt-4 text-sm leading-6 text-slate-500">
                     {contact.responseTimeNotice}
                   </p>
-                  <label className="mt-4 flex items-start gap-3">
+                  <label className="mt-4 flex cursor-pointer items-start gap-3">
                     <input
                       type="checkbox"
                       required
                       checked={values.gdprConsent}
                       onChange={(event) => updateField("gdprConsent", event.target.checked)}
-                      className="mt-1 h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
+                      className="mt-0.5 h-[18px] w-[18px] shrink-0 cursor-pointer rounded border-slate-300 text-primary focus:ring-primary disabled:cursor-not-allowed"
                     />
                     <span className="text-sm leading-6 text-slate-600">
                       {contact.gdprConsentPrefix}

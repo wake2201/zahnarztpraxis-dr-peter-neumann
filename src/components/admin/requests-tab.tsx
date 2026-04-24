@@ -535,14 +535,16 @@ function SelectionCheckbox({
   }, [indeterminate]);
 
   return (
-    <input
-      ref={inputRef}
-      type="checkbox"
-      checked={checked}
-      onChange={onChange}
-      disabled={disabled}
-      aria-label={ariaLabel}
-      className="w-4 h-4 rounded border-slate-300 text-primary focus:ring-primary"
-    />
+    <label className={`flex h-5 w-5 items-center justify-center ${disabled ? "cursor-not-allowed" : "cursor-pointer"}`}>
+      <input
+        ref={inputRef}
+        type="checkbox"
+        checked={checked}
+        onChange={onChange}
+        disabled={disabled}
+        aria-label={ariaLabel}
+        className="h-[18px] w-[18px] cursor-pointer rounded border-slate-300 text-primary focus:ring-primary disabled:cursor-not-allowed"
+      />
+    </label>
   );
 }
