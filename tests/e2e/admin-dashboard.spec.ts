@@ -154,7 +154,7 @@ test.describe("Admin Dashboard", () => {
     await loginAsAdmin(page);
 
     await expect(page.getByText("Gesamt", { exact: true })).toBeVisible();
-    await expect(page.getByText("Ungelesen", { exact: true })).toBeVisible();
+    await expect(page.getByTestId("request-stat-unread").getByText("Ungelesen", { exact: true })).toBeVisible();
     await expect(page.getByText("Erledigt", { exact: true })).toBeVisible();
     await expect(page.getByText("Patientenanfragen")).toBeVisible();
     await expect(page.getByText("DSGVO-Hinweis")).toBeVisible();
