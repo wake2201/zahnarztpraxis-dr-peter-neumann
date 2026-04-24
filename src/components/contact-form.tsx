@@ -262,6 +262,8 @@ export function ContactForm() {
                     <div className="flex gap-3">
                       <div className="relative w-28 flex-shrink-0">
                         <select
+                          id="countryCode"
+                          name="countryCode"
                           aria-label="Ländervorwahl"
                           value={values.countryCode}
                           onChange={(event) => updateField("countryCode", event.target.value as FormValues["countryCode"])}
