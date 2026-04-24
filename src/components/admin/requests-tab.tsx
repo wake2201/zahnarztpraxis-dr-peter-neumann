@@ -34,6 +34,12 @@ interface DeleteConfirmation {
 interface Props {
   requests: ContactRequest[];
   onRequestsChange: React.Dispatch<React.SetStateAction<ContactRequest[]>>;
+  canLoadNewerRequests: boolean;
+  canLoadOlderRequests: boolean;
+  isLoadingOlderRequests: boolean;
+  paginationError: string;
+  onLoadNewerRequests: () => void;
+  onLoadOlderRequests: () => void;
 }
 
 function applyRequestMutation(state: ContactRequest[], mutation: RequestMutation) {
@@ -58,7 +64,16 @@ function haveMatchingIds(currentIds: string[], targetIds: string[]) {
   return currentIds.length === targetIds.length && currentIds.every((id) => targetIds.includes(id));
 }
 
-export function RequestsTab({ requests, onRequestsChange }: Props) {
+export function RequestsTab({
+  requests,
+  onRequestsChange,
+  canLoadNewerRequests,
+  canLoadOlderRequests,
+  isLoadingOlderRequests,
+  paginationError,
+  onLoadNewerRequests,
+  onLoadOlderRequests,
+}: Props) {
   const router = useRouter();
   const [, startRequestTransition] = useTransition();
   const [pendingMutation, setPendingMutation] = useState<RequestMutation | null>(null);
@@ -225,6 +240,7 @@ export function RequestsTab({ requests, onRequestsChange }: Props) {
             <h2 className="text-lg font-bold text-slate-800">Patientenanfragen</h2>
             <p className="mt-1 text-sm text-slate-500">Alle eingegangenen Kontaktanfragen - sortiert nach Datum (neueste zuerst)</p>
             {requestActionError && <p className="mt-1 text-sm text-red-600">{requestActionError}</p>}
+            {paginationError && <p className="mt-1 text-sm text-red-600">{paginationError}</p>}
           </div>
 
           {requests.length > 0 && (
@@ -325,6 +341,40 @@ export function RequestsTab({ requests, onRequestsChange }: Props) {
                   )}
                 </div>
               </div>
+            </div>
+          )}
+
+          {(canLoadNewerRequests || canLoadOlderRequests) && (
+            <div className="flex flex-col gap-2 border-t border-slate-100 pt-4 sm:flex-row sm:justify-end">
+              {canLoadNewerRequests && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={onLoadNewerRequests}
+                  disabled={Boolean(pendingMutation) || isLoadingOlderRequests}
+                  className="h-9 w-full px-3 text-sm sm:w-auto"
+                >
+                  Neuere Anfragen
+                </Button>
+              )}
+              {canLoadOlderRequests && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={onLoadOlderRequests}
+                  disabled={Boolean(pendingMutation) || isLoadingOlderRequests}
+                  className="h-9 w-full px-3 text-sm sm:w-auto"
+                >
+                  {isLoadingOlderRequests ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span className="ml-1.5">Wird geladen...</span>
+                    </>
+                  ) : (
+                    "Ältere Anfragen laden"
+                  )}
+                </Button>
+              )}
             </div>
           )}
         </div>

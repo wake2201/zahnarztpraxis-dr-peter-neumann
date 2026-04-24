@@ -203,6 +203,7 @@ Wichtige Schemas:
 - Benutzer und Audit-Logs sind nur fuer `admin` sichtbar
 - Teilabfragen werden mit `Promise.allSettled(...)` geladen, damit ein Teilfehler nicht das gesamte Dashboard unnoetig blockiert
 - `dashboard-client.tsx` haelt die aktuelle Request-Liste als gemeinsame Client-Quelle fuer Tab-Badge, Zaehlerkarten und Requests-Tab
+- Kontaktanfragen werden in 50er-Seiten geladen; aeltere Anfragen bleiben ueber Cursor-Pagination im Requests-Tab erreichbar
 - Einzel- und Sammelaktionen fuer Kontaktanfragen laufen ueber denselben Client/Server-Mutationspfad
 - Request-Liste und Request-Zaehler werden erst nach bestaetigtem Mutationserfolg aktualisiert; fehlgeschlagene Aktionen refreshen zurueck auf Server-Wahrheit
 
@@ -226,7 +227,7 @@ Wichtige Schemas:
 
 | Funktion | Input | Output | Bemerkung |
 | --- | --- | --- | --- |
-| `getContactRequests()` | optionaler Cursor | `ContactRequest[]` | sortiert nach `createdAt desc` |
+| `getContactRequests()` | optionaler Cursor | `ContactRequest[]` | 50er-Seiten, sortiert nach `createdAt desc`, `id desc` |
 | `mutateContactRequests()` | `{ ids, action }` | `{ success, error? }` | einheitliche transaktionale Mutation fuer Einzel- und Sammelaktionen; aktualisiert oder loescht atomar, schreibt Delete-Audit-Logs pro Request und revalidiert `/admin` nach Erfolg |
 
 #### Admin-only (`requireAdmin()`)

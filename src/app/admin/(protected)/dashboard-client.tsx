@@ -9,8 +9,10 @@ import { RequestsTab } from "@/components/admin/requests-tab";
 import type { AuditLogEntry, ContactRequest, DashboardTab, UserAccount } from "@/components/admin/types";
 import { UsersTab } from "@/components/admin/users-tab";
 import { Button } from "@/components/ui/button";
+import { getContactRequests } from "@/lib/actions";
 
 const POLL_INTERVAL_MS = 30_000;
+const REQUESTS_PAGE_SIZE = 50;
 
 interface Props {
   requests: ContactRequest[];
@@ -31,9 +33,16 @@ export function AdminDashboardClient({
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<DashboardTab>("requests");
   const [requestItems, setRequestItems] = useState(requests);
+  const [requestPageHistory, setRequestPageHistory] = useState<ContactRequest[][]>([]);
+  const [hasOlderRequests, setHasOlderRequests] = useState(requests.length >= REQUESTS_PAGE_SIZE);
+  const [isLoadingOlderRequests, setIsLoadingOlderRequests] = useState(false);
+  const [requestPaginationError, setRequestPaginationError] = useState("");
 
   useEffect(() => {
     setRequestItems(requests);
+    setRequestPageHistory([]);
+    setHasOlderRequests(requests.length >= REQUESTS_PAGE_SIZE);
+    setRequestPaginationError("");
   }, [requests]);
 
   useEffect(() => {
@@ -46,15 +55,58 @@ export function AdminDashboardClient({
   // Vercel-Invocations und DB-Hits deutlich niedriger bleiben.
   useEffect(() => {
     const interval = setInterval(() => {
-      if (document.visibilityState === "visible") {
+      if (document.visibilityState === "visible" && requestPageHistory.length === 0) {
         router.refresh();
       }
     }, POLL_INTERVAL_MS);
 
     return () => clearInterval(interval);
-  }, [router]);
+  }, [requestPageHistory.length, router]);
 
   const unread = requestItems.filter((request) => !request.read).length;
+
+  async function handleLoadOlderRequests() {
+    const cursor = requestItems[requestItems.length - 1]?.id;
+    if (!cursor || isLoadingOlderRequests) {
+      return;
+    }
+
+    setIsLoadingOlderRequests(true);
+    setRequestPaginationError("");
+
+    try {
+      const olderRequests = await getContactRequests(cursor);
+
+      if (olderRequests.length === 0) {
+        setHasOlderRequests(false);
+        return;
+      }
+
+      setRequestPageHistory((current) => [...current, requestItems]);
+      setRequestItems(olderRequests);
+      setHasOlderRequests(olderRequests.length >= REQUESTS_PAGE_SIZE);
+    } catch {
+      setRequestPaginationError("Ältere Anfragen konnten nicht geladen werden.");
+    } finally {
+      setIsLoadingOlderRequests(false);
+    }
+  }
+
+  function handleLoadNewerRequests() {
+    if (requestPageHistory.length === 0) {
+      return;
+    }
+
+    const previousPage = requestPageHistory[requestPageHistory.length - 1];
+    if (!previousPage) {
+      return;
+    }
+
+    setRequestItems(previousPage);
+    setRequestPageHistory((current) => current.slice(0, -1));
+    setHasOlderRequests(true);
+    setRequestPaginationError("");
+  }
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -104,7 +156,18 @@ export function AdminDashboardClient({
       </header>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {activeTab === "requests" && <RequestsTab requests={requestItems} onRequestsChange={setRequestItems} />}
+        {activeTab === "requests" && (
+          <RequestsTab
+            requests={requestItems}
+            onRequestsChange={setRequestItems}
+            canLoadNewerRequests={requestPageHistory.length > 0}
+            canLoadOlderRequests={hasOlderRequests}
+            isLoadingOlderRequests={isLoadingOlderRequests}
+            paginationError={requestPaginationError}
+            onLoadNewerRequests={handleLoadNewerRequests}
+            onLoadOlderRequests={handleLoadOlderRequests}
+          />
+        )}
         {activeTab === "users" && isAdmin && <UsersTab users={users} />}
         {activeTab === "logs" && isAdmin && <LogsTab auditLogs={auditLogs} />}
       </main>

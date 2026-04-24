@@ -105,7 +105,7 @@ export async function getContactRequests(cursor?: string) {
   const requests = await prisma.contactRequest.findMany({
     take: MAX_REQUESTS_PER_PAGE,
     ...(parsedCursor.data ? { skip: 1, cursor: { id: parsedCursor.data } } : {}),
-    orderBy: { createdAt: "desc" },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
   });
 
   return requests.map((request) => ({

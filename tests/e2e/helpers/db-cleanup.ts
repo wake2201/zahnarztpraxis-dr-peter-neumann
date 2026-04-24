@@ -34,7 +34,7 @@ export async function cleanupTestContactRequests() {
 }
 
 export async function createTestContactRequest(
-  data: Partial<Omit<TestContactRequest, "id" | "createdAt">> = {},
+  data: Partial<Omit<TestContactRequest, "id">> = {},
 ): Promise<TestContactRequest> {
   const uniqueSuffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
@@ -48,6 +48,7 @@ export async function createTestContactRequest(
         message: data.message ?? `E2E-Test Nachricht ${uniqueSuffix}`,
         gdprConsent: data.gdprConsent ?? true,
         read: data.read ?? false,
+        ...(data.createdAt ? { createdAt: data.createdAt } : {}),
       },
     });
   });

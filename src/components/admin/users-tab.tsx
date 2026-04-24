@@ -87,8 +87,9 @@ export function UsersTab({ users }: Props) {
         </div>
         <form onSubmit={handleCreateUser} className="grid sm:grid-cols-3 gap-4">
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">Name</label>
+            <label htmlFor="new-user-name" className="block text-sm font-medium text-slate-700 mb-1.5">Name</label>
             <Input
+              id="new-user-name"
               required
               value={newUserName}
               onChange={(e) => setNewUserName(e.target.value)}
@@ -96,8 +97,9 @@ export function UsersTab({ users }: Props) {
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">E-Mail</label>
+            <label htmlFor="new-user-email" className="block text-sm font-medium text-slate-700 mb-1.5">E-Mail</label>
             <Input
+              id="new-user-email"
               type="email"
               required
               value={newUserEmail}
@@ -106,9 +108,10 @@ export function UsersTab({ users }: Props) {
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">Passwort (min. 8)</label>
+            <label htmlFor="new-user-password" className="block text-sm font-medium text-slate-700 mb-1.5">Passwort (min. 8)</label>
             <div className="relative">
               <Input
+                id="new-user-password"
                 type={showNewUserPassword ? "text" : "password"}
                 required
                 minLength={8}

@@ -63,20 +63,18 @@ async function loginAsAdmin(page: Page) {
 
 async function openUsersTab(page: Page) {
   const usersTab = page.getByRole("button", { name: /Benutzer/i });
+  const usersForm = page.getByLabel("Name");
   await expect(usersTab).toBeVisible({ timeout: 10_000 });
   for (let attempt = 0; attempt < 2; attempt += 1) {
     await usersTab.click();
-    const formVisible = await page
-      .getByPlaceholder("Max Mustermann")
-      .isVisible({ timeout: 3_000 })
-      .catch(() => false);
+    const formVisible = await usersForm.isVisible({ timeout: 3_000 }).catch(() => false);
 
     if (formVisible) {
       return;
     }
   }
 
-  await expect(page.getByPlaceholder("Max Mustermann")).toBeVisible({ timeout: 10_000 });
+  await expect(usersForm).toBeVisible({ timeout: 10_000 });
 }
 
 async function openLogsTab(page: Page) {
@@ -160,6 +158,39 @@ test.describe("Admin Dashboard", () => {
     await expect(page.getByText("DSGVO-Hinweis")).toBeVisible();
   });
 
+  test("Aeltere Anfragen bleiben per Pagination erreichbar und verwaltbar", async ({ page }) => {
+    await cleanupTestContactRequests();
+
+    const newestAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    const requests = await Promise.all(
+      Array.from({ length: 51 }, (_, index) =>
+        createTestContactRequest({
+          firstName: `E2E-Test-Page-${index}`,
+          message: `E2E-Test Pagination ${index}`,
+          read: false,
+          createdAt: new Date(newestAt.getTime() - index * 60_000),
+        }),
+      ),
+    );
+    const newestRequest = requests[0]!;
+    const oldestRequest = requests[50]!;
+
+    await loginAsAdmin(page);
+
+    await expect(page.getByText(newestRequest.message)).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText(oldestRequest.message)).toHaveCount(0);
+
+    await page.getByRole("button", { name: /Ältere Anfragen laden/i }).click();
+
+    const olderRow = requestRow(page, oldestRequest.message);
+    await expect(olderRow.getByText(oldestRequest.message)).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByRole("button", { name: /Neuere Anfragen/i })).toBeVisible();
+
+    await olderRow.getByRole("button", { name: /Gelesen/i }).click();
+    await expect.poll(async () => getContactRequestReadState(oldestRequest.id)).toBe(true);
+    await expect(olderRow.getByRole("button", { name: /Ungelesen/i })).toBeVisible({ timeout: 10_000 });
+  });
+
   test("Admin sieht Benutzer- und Aktivitaetslog-Tabs", async ({ page }) => {
     await loginAsAdmin(page);
 
@@ -180,9 +211,9 @@ test.describe("Admin Dashboard", () => {
     await loginAsAdmin(page);
     await openUsersTab(page);
 
-    await page.getByPlaceholder("Max Mustermann").fill("E2E Testmitarbeiter");
-    await page.getByPlaceholder("mitarbeiter@praxis.de").fill(CREATED_STAFF_EMAIL);
-    await page.getByPlaceholder("••••••••").fill("Test1234!");
+    await page.getByLabel("Name").fill("E2E Testmitarbeiter");
+    await page.getByLabel("E-Mail").fill(CREATED_STAFF_EMAIL);
+    await page.getByLabel("Passwort (min. 8)").fill("Test1234!");
     await page.getByRole("button", { name: /Mitarbeiter erstellen/i }).click();
 
     await expect(page.getByText("Mitarbeiter erfolgreich erstellt!")).toBeVisible({ timeout: 10_000 });
@@ -469,9 +500,9 @@ test.describe("Admin Dashboard", () => {
     await openUsersTab(page);
     await disableUserFormValidation(page);
 
-    await page.getByPlaceholder("Max Mustermann").fill("Playwright Invalid Email");
-    await page.getByPlaceholder("mitarbeiter@praxis.de").fill(invalidEmail);
-    await page.getByPlaceholder("••••••••").fill("StrongPass123!");
+    await page.getByLabel("Name").fill("Playwright Invalid Email");
+    await page.getByLabel("E-Mail").fill(invalidEmail);
+    await page.getByLabel("Passwort (min. 8)").fill("StrongPass123!");
     await page.getByRole("button", { name: /Mitarbeiter erstellen/i }).click();
 
     await expect(page.getByText("Ungültige E-Mail-Adresse.")).toBeVisible({ timeout: 10_000 });
@@ -483,9 +514,9 @@ test.describe("Admin Dashboard", () => {
     await openUsersTab(page);
     await disableUserFormValidation(page);
 
-    await page.getByPlaceholder("Max Mustermann").fill("Playwright Weak Password");
-    await page.getByPlaceholder("mitarbeiter@praxis.de").fill(WEAK_PASSWORD_EMAIL);
-    await page.getByPlaceholder("••••••••").fill("password");
+    await page.getByLabel("Name").fill("Playwright Weak Password");
+    await page.getByLabel("E-Mail").fill(WEAK_PASSWORD_EMAIL);
+    await page.getByLabel("Passwort (min. 8)").fill("password");
     await page.getByRole("button", { name: /Mitarbeiter erstellen/i }).click();
 
     await expect(
