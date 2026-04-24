@@ -2,7 +2,7 @@ import { test, expect, Page } from "@playwright/test";
 import { cleanupLoginAttempts, cleanupUsersByEmail, disconnectPrisma, ensureTestUser } from "./helpers/db-cleanup";
 
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || "admin@zeitzer-zahnarzt.de";
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "Admin123!";
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "EinSicheresPasswort123!";
 
 const STAFF_EMAIL = "staff-visibility-test@test.de";
 const STAFF_PASSWORD = "Password123!";

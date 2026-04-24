@@ -12,7 +12,7 @@ import {
 } from "./helpers/db-cleanup";
 
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || "admin@zeitzer-zahnarzt.de";
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "Admin123!";
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "EinSicheresPasswort123!";
 const UNKNOWN_ROLE_EMAIL = "unknown-role-user@test.de";
 const STALE_ROLE_EMAIL = "stale-role-user@test.de";
 const REFRESHED_STAFF_ADMIN_EMAIL = "refresh-downgraded-admin@test.de";

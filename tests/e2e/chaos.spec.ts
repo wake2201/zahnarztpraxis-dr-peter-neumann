@@ -3,6 +3,7 @@ import {
   cleanupRateLimits,
   cleanupTestContactRequests,
   contactRequestExists,
+  countContactRequestsByFirstName,
   disconnectPrisma,
 } from "./helpers/db-cleanup";
 
@@ -29,7 +30,7 @@ test.describe("Chaos & Integrity", () => {
   });
 
   test("Rapid-fire Double-Click auf Submit erzeugt nur einen DB-Eintrag", async ({ page }) => {
-    const firstName = `Chaos-${Date.now()}`;
+    const firstName = `E2E-Test-Chaos-${Date.now()}`;
 
     await page.goto("/#kontakt");
     await dismissCookieBanner(page);
@@ -44,18 +45,13 @@ test.describe("Chaos & Integrity", () => {
     const submitBtn = page.getByRole("button", { name: "Anfrage absenden" });
     await submitBtn.scrollIntoViewIfNeeded();
 
-    await submitBtn.evaluate((button: HTMLButtonElement) => {
-      button.click();
-      button.click();
-      button.click();
-    });
+    await submitBtn.dblclick();
 
     await expect(page.getByText("Vielen Dank für Ihre Anfrage!")).toBeVisible({ timeout: 10_000 });
 
-    // Bei aktiviertem Rate-Limit sollten keine Duplikate entstehen;
-    // aber mindestens ein Eintrag.
-    const exists = await contactRequestExists(firstName);
-    expect(exists).toBe(true);
+    // Bei aktiviertem Rate-Limit sollte genau ein Eintrag entstehen.
+    const count = await countContactRequestsByFirstName(firstName);
+    expect(count).toBe(1);
   });
 
   test("Bypass-Versuch: nur HTML-Tags im Vornamen wird abgelehnt", async ({ page }) => {

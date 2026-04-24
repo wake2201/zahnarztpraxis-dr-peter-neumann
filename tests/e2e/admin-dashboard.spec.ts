@@ -17,7 +17,7 @@ import {
 } from "./helpers/db-cleanup";
 
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || "admin@zeitzer-zahnarzt.de";
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "Admin123!";
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "EinSicheresPasswort123!";
 const CREATED_STAFF_EMAIL = "e2e-staff@test.de";
 const WEAK_PASSWORD_EMAIL = "weak-password-user@test.de";
 const PROMOTED_STAFF_EMAIL = "promoted-staff@test.de";

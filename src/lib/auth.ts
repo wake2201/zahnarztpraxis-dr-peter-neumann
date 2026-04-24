@@ -6,6 +6,7 @@ import { headers } from "next/headers";
 import { Prisma } from "../generated/prisma";
 import { prisma } from "./prisma";
 import { getClientIp, isTrustedClientIpError } from "./client-ip";
+import { logger } from "./logger";
 
 const LOCKOUT_DURATION = 15 * 60 * 1000; // 15 Minuten
 const LOGIN_ATTEMPT_STALE_DURATION = LOCKOUT_DURATION;
@@ -237,7 +238,12 @@ export const authOptions: NextAuthOptions = {
               },
             });
           })
-          .catch(() => {});
+          .catch((error) => {
+            logger.error(
+              { err: error, action: "cleanupLoginAttempts" },
+              "[cleanupLoginAttempts] LoginAttempt-Bereinigung fehlgeschlagen",
+            );
+          });
 
         if (result.status === "locked") {
           throw new Error(JSON.stringify({ code: result.code, remainingMinutes: result.remainingMinutes }));

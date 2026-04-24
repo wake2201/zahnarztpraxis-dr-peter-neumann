@@ -192,10 +192,15 @@ export async function updateUserRoleByEmail(email: string, role: string) {
  * Prueft, ob eine Kontaktanfrage mit dem gegebenen Vornamen existiert.
  */
 export async function contactRequestExists(firstName: string): Promise<boolean> {
+  const count = await countContactRequestsByFirstName(firstName);
+  return count > 0;
+}
+
+export async function countContactRequestsByFirstName(firstName: string): Promise<number> {
   const count = await prisma.contactRequest.count({
     where: { firstName },
   });
-  return count > 0;
+  return count;
 }
 
 export async function findLatestContactRequestByFirstName(firstName: string) {

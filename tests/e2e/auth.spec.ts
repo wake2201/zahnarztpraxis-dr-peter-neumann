@@ -11,7 +11,7 @@ import {
 } from "./helpers/db-cleanup";
 
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || "admin@zeitzer-zahnarzt.de";
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "Admin123!";
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "EinSicheresPasswort123!";
 const WRONG_PASSWORD = "FalschesPasswort1!";
 const INVALID_ROLE_EMAIL = "invalid-role-login@test.de";
 const INVALID_ROLE_PASSWORD = "OwnerRole123!";

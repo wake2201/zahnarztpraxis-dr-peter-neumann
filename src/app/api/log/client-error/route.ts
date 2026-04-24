@@ -5,6 +5,33 @@ import { clientErrorLogSchema, ERROR_MESSAGES } from "@/lib/schemas";
 
 const CLIENT_ERROR_RATE_LIMIT_MAX_REQUESTS = 10;
 const CLIENT_ERROR_RATE_LIMIT_WINDOW_MS = 10 * 60 * 1000;
+const SAFE_LOGGED_PATHNAMES = new Set([
+  "/",
+  "/admin",
+  "/admin/login",
+  "/datenschutz",
+  "/impressum",
+]);
+
+function normalizeLoggedPathname(pathname: string | undefined): string {
+  if (!pathname) {
+    return "/unknown";
+  }
+
+  if (SAFE_LOGGED_PATHNAMES.has(pathname)) {
+    return pathname;
+  }
+
+  if (pathname.startsWith("/admin/")) {
+    return "/admin/:path";
+  }
+
+  if (pathname === "/api" || pathname.startsWith("/api/")) {
+    return "/api/:path";
+  }
+
+  return "/other";
+}
 
 export async function POST(request: Request) {
   try {
@@ -43,7 +70,7 @@ export async function POST(request: Request) {
     {
       action: "clientGlobalError",
       digest: parsed.data.digest,
-      pathname: parsed.data.pathname,
+      pathname: normalizeLoggedPathname(parsed.data.pathname),
     },
     "[clientGlobalError] Client-Fehler empfangen",
   );

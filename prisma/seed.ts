@@ -18,7 +18,7 @@ function getSeedCredentials() {
   if (!email || !password) {
     throw new Error(
       "ADMIN_EMAIL und ADMIN_PASSWORD muessen als Umgebungsvariablen in .env gesetzt sein.\n" +
-        "Beispiel: ADMIN_EMAIL=admin@praxis.de ADMIN_PASSWORD=MeinSicheresPasswort123!",
+        "Beispiel: ADMIN_EMAIL=admin@praxis.de ADMIN_PASSWORD=EinSicheresPasswort123!",
     );
   }
 
