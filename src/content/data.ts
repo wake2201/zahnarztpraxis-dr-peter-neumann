@@ -198,7 +198,7 @@ export const publicContent = {
     reachabilityOptions: [
       { value: "morning", label: "vormittags" },
       { value: "afternoon", label: "nachmittags" },
-      { value: "flexible", label: "egal" },
+      { value: "flexible", label: "jederzeit" },
     ],
     detailsLabel: "Zusätzliche Informationen",
     detailsPlaceholder: "Beschreiben Sie kurz Ihr Anliegen…",

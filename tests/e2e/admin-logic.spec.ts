@@ -134,8 +134,8 @@ test.describe("Admin Logic Corrections", () => {
 
       const activeRow = requestRows(secondPage, request.message).first();
       await expect(activeRow).toBeVisible({ timeout: 10_000 });
-      await activeRow.getByRole("button", { name: /Loeschen|Löschen/i }).click();
-      await secondPage.getByRole("button", { name: /Endgueltig loeschen|Endgültig löschen/i }).click();
+      await activeRow.getByRole("button", { name: /Löschen/i }).click();
+      await secondPage.getByRole("button", { name: /Endgültig löschen/i }).click();
 
       await expect.poll(async () => getContactRequestById(request.id)).toBe(null);
     } finally {
@@ -169,7 +169,7 @@ test.describe("Admin Logic Corrections", () => {
 
     await firstRow.getByRole("checkbox").check();
     await secondRow.getByRole("checkbox").check();
-    await expect(page.getByTestId("request-selection-count")).toHaveText("2 ausgewaehlt");
+    await expect(page.getByTestId("request-selection-count")).toHaveText("2 ausgewählt");
 
     const secondPage = await page.context().newPage();
     try {
@@ -178,8 +178,8 @@ test.describe("Admin Logic Corrections", () => {
 
       const staleRow = requestRows(secondPage, secondRequest.message).first();
       await expect(staleRow).toBeVisible({ timeout: 10_000 });
-      await staleRow.getByRole("button", { name: /Loeschen|Löschen/i }).click();
-      await secondPage.getByRole("button", { name: /Endgueltig loeschen|Endgültig löschen/i }).click();
+      await staleRow.getByRole("button", { name: /Löschen/i }).click();
+      await secondPage.getByRole("button", { name: /Endgültig löschen/i }).click();
 
       await expect.poll(async () => getContactRequestById(secondRequest.id)).toBe(null);
     } finally {
