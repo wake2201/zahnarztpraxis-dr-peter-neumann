@@ -174,6 +174,39 @@ Wichtig:
 - Es gibt keine Prisma-Migrationsdateien; Schema-Sync erfolgt bewusst nur ueber `prisma db push`.
 - `prisma.config.ts` liefert die `DATABASE_URL` fuer Prisma-CLI-Befehle.
 
+### Lokale Testdatenbank fuer Entwicklung und E2E
+
+Lokale Validierung soll nicht gegen die produktive oder Vercel-Datenbank laufen. Lege dafuer eine lokale PostgreSQL-Datenbank und eine nicht versionierte `.env.test.local` im Projektverzeichnis an. Die Datei ist durch `.gitignore` abgedeckt und darf nicht committet werden.
+
+```powershell
+createdb -h localhost -p 5432 -U <LOCAL_POSTGRES_USER> zahnarzt_test
+```
+
+```env
+DATABASE_URL="postgresql://<LOCAL_POSTGRES_USER>:<LOCAL_POSTGRES_PASSWORD>@localhost:5432/zahnarzt_test?sslmode=disable"
+NEXTAUTH_URL="http://localhost:3000"
+NEXTAUTH_SECRET="<GENERATED_32_PLUS_CHARACTER_LOCAL_SECRET>"
+ADMIN_EMAIL="<LOCAL_ADMIN_EMAIL>"
+ADMIN_PASSWORD="<LOCAL_STRONG_ADMIN_PASSWORD>"
+TRUST_PROXY="false"
+```
+
+`NEXTAUTH_SECRET` muss mindestens 32 Zeichen lang sein:
+
+```powershell
+node -e "process.stdout.write(require('crypto').randomBytes(48).toString('base64'))"
+```
+
+Lokale Validierung nutzt explizit `.env.test.local` und bricht ab, wenn `DATABASE_URL` nicht auf localhost zeigt:
+
+```powershell
+npm run prisma:validate:local
+npm run prisma:push:local
+npm run prisma:generate:local
+npm run prisma:seed:local
+npm run test:e2e:local -- --reporter=list
+```
+
 ---
 
 ## 5. Produktions-Build erstellen
