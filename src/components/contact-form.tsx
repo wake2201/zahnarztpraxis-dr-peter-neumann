@@ -20,6 +20,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { ContactPathChoice } from "@/components/contact-path-choice";
 import { submitContactForm } from "@/lib/actions";
 import { EUROPEAN_COUNTRY_CODES } from "@/lib/country-codes";
 import { cn } from "@/lib/utils";
@@ -145,6 +146,7 @@ export function ContactForm() {
   return (
     <section id="kontakt" ref={ref} className="bg-white py-20 md:py-32">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+        <ContactPathChoice />
         <div className="grid gap-10 lg:grid-cols-[0.92fr_1.08fr] lg:items-start lg:gap-8">
           <motion.div
             initial={{ opacity: 0, y: 30 }}
@@ -183,9 +185,11 @@ export function ContactForm() {
           </motion.div>
 
           <motion.div
+            id="kontaktformular"
             initial={{ opacity: 0, y: 30 }}
             animate={isInView ? { opacity: 1, y: 0 } : {}}
             transition={{ duration: 0.6, delay: 0.15 }}
+            className="scroll-mt-24"
           >
             {formStatus === "success" ? (
               <div className="rounded-[2rem] border border-green-200 bg-green-50 p-8 text-center shadow-card sm:p-10">

@@ -140,6 +140,13 @@ Es gibt drei relevante Prisma-Dateien:
 | `LoginAttempt` | DB-basierter Lockout-Status fuer Admin-Login |
 | `AuditLog` | Nachvollziehbarkeit von Admin-Aktionen |
 | `RateLimit` | DB-basiertes Abuse-Protection-Budget fuer oeffentliche Pfade |
+| `AppointmentSettings` | Singleton fuer 15-Minuten-Raster, Mindestvorlauf, Horizont und `Europe/Berlin` |
+| `AppointmentType` | Aktivierbare Terminart mit Dauer, Online-Freigabe und AUTO/MANUAL-Policy |
+| `AppointmentWeeklyAvailability` | Wiederkehrende lokale Wochenfenster fuer die Buchungs-Engine |
+| `AppointmentAvailabilityException` | Datumsbezogene `OPEN`-/`BLOCK`-Intervalle; `BLOCK` hat Vorrang |
+| `Appointment` | Termin mit Typ-/Dauer-/Policy-Snapshots, Patientendaten, Status, Quelle und Revision |
+| `AppointmentSlot` | Globale, per UTC-Startzeit eindeutige 15-Minuten-Kapazitaetseinheit |
+| `AppointmentAccessSession` | Kurzlebige, gehashte Patientensession; maximal eine je Termin |
 
 ### Datenmodell-Details
 
@@ -147,6 +154,11 @@ Es gibt drei relevante Prisma-Dateien:
 - `LoginAttempt.identifier` ist ein SHA-256-Hash aus vertrauenswuerdiger IP, User-Agent-Kontext und Bucket-Typ
 - `AuditLog.action` enthaelt aktuell produktive Aktionen wie `LOGIN`, `CREATE_USER`, `DELETE_USER`, `DELETE_REQUEST`
 - `RateLimit.ip` speichert den Bucket-Key, also z.B. `contact:<ip>` oder `client-error:<ip>`
+- Terminstatus ist `PENDING | CONFIRMED | REJECTED | CANCELLED`; Quelle ist `ONLINE | ADMIN`
+- Aktive `PENDING`- und `CONFIRMED`-Termine besitzen `durationMinutes / 15` Slots. Ablehnung oder Stornierung loescht nur die Slots, nicht den Termin.
+- `managementCodeHash` und `AppointmentAccessSession.tokenHash` speichern ausschliesslich SHA-256-Hashes; Klartext-Codes und Session-Tokens werden nicht persistiert.
+- `revision` bildet die Optimistic-Concurrency-Grenze fuer Admin-Mutationen und Verschiebungen.
+- Patientenmutationen erfassen die erwartete Revision vor dem retry-faehigen Schreibvorgang; ein Serializable-Retry darf eine parallele Aenderung nicht auf eine neuere Revision rebasen.
 
 ---
 
@@ -159,11 +171,14 @@ Es gibt drei relevante Prisma-Dateien:
 | `actions/contact.ts` | Oeffentliches Kontaktformular und Request-Verwaltung |
 | `actions/users.ts` | Benutzeranlage, Benutzerloeschung, Benutzerliste |
 | `actions/logs.ts` | Audit-Log-Lesen und Retention-Cleanup |
+| `actions/appointments-public.ts` | Oeffentliche Typen, Verfuegbarkeit und Buchung |
+| `actions/appointments-patient.ts` | Code-Austausch, Session, Patienten-Verschiebung und -Stornierung |
+| `actions/appointments-admin.ts` | Operatives Terminmanagement und Admin-Konfiguration |
 | `actions.ts` | Barrel-Export fuer Komponentenimporte |
 
 ### Serverseitige Validierung
 
-`src/lib/schemas.ts` ist die einzige Quelle fuer Eingabevalidierung.
+`src/lib/schemas.ts` validiert die bisherigen Kontakt-/Admin-Flows; `src/lib/appointments/schemas.ts` ist die fachliche Validierungsquelle fuer alle Termin-Actions.
 
 Wichtige Schemas:
 
@@ -195,6 +210,36 @@ Wichtige Schemas:
 7. `ContactRequest` wird transaktional gespeichert
 8. `after()` triggert die globale Bereinigung abgelaufener Rate-Limit-Buckets
 
+### Termin-Engine und Reservierungsfluss
+
+1. Oeffentliche Terminarten enthalten nur `active && onlineBookable`; die interne Telefonbuchung darf alle aktiven Typen verwenden.
+2. Verfuegbarkeit wird ausschliesslich serverseitig aus Typdauer, festen 15-Minuten-Slots, Wochenfenstern, `OPEN`-/`BLOCK`-Ausnahmen, Mindestvorlauf, Buchungshorizont und belegten `AppointmentSlot`-Zeilen berechnet.
+3. Lokale Regeln werden in `Europe/Berlin` ausgewertet. Nicht existente oder mehrdeutige DST-Zeiten werden nicht angeboten und fail-closed abgelehnt.
+4. Beim Abschluss werden Typstatus, Online-Freigabe, Zeitfenster, BLOCK, Vorlauf, Horizont und Belegung innerhalb einer serialisierbaren Transaktion erneut geprueft. Angezeigte Slots sind keine Vorreservierung.
+5. Die Transaktion schreibt `Appointment` und alle benoetigten `AppointmentSlot`-Zeilen gemeinsam. Die globale Unique-Constraint auf `slotStartAt` laesst bei Konkurrenz exakt einen Gewinner zu; Retry-/Conflict-Pfade erzeugen keine Teilreservierung.
+6. `AUTO` erzeugt `CONFIRMED`, `MANUAL` erzeugt `PENDING`. Beide Status blockieren Kapazitaet, bis eine Ablehnung oder Stornierung die Slots transaktional freigibt.
+7. Typname, Dauer und Bestaetigungsmodus werden im Termin gesnapshottet. Auch eine spaetere Verschiebung verwendet diese Snapshots; aktuelle Aktiv-/Online-Freigaben bleiben zusaetzliche serverseitige Gates, schreiben die Historie aber nicht um.
+
+### Patientenverwaltung ohne Konto
+
+- Nach Online-Buchung wird der hochentropische Management-Code genau einmal im Browser angezeigt und nie in URL, Log oder Datenbank-Klartext geschrieben.
+- `verifyAppointmentManagementCode()` akzeptiert nur den Klartext-Code per POST, hasht ihn und tauscht ihn gegen ein zufaelliges, `HttpOnly`, `SameSite=Lax`, auf `/termin` begrenztes Session-Cookie.
+- Die DB speichert nur den Session-Token-Hash mit 20 Minuten Ablaufzeit. Ein erneuter Code-Austausch ersetzt die vorherige Session desselben Termins.
+- Lesen, Verfuegbarkeit, Verschieben und Stornieren werden aus der Session abgeleitet; Termin-ID, Typ-ID, Status, Dauer und Policy kommen nicht vertrauensvoll vom Client.
+- Verschieben ersetzt alte und neue Slots in einer Transaktion. Bei Kollision oder veralteter Revision bleibt der alte Termin vollstaendig erhalten. MANUAL-Termine werden nach Verschiebung erneut `PENDING`; AUTO-Termine werden `CONFIRMED`.
+- Sobald die gespeicherte Startzeit erreicht ist, bleiben Statusdaten lesbar, aber Patienten-Verschiebung und -Stornierung werden in DTO und Mutation fail-closed deaktiviert.
+- Beim expliziten Sitzungsende wird zuerst der serverseitige Token-Hash geloescht und erst danach das Browser-Cookie entfernt, damit ein DB-Fehler einen erneuten Logout-Versuch nicht verhindert.
+
+### Admin-Termin-Datenfluss
+
+- `page.tsx` laedt Kontaktanfragen und operatives Termin-Dashboard fuer `staff` und `admin`; die Terminkonfiguration wird nur fuer `admin` geladen. Getrennte `Promise.allSettled(...)`-Ergebnisse liefern unterscheidbare Fehler.
+- Der Termine-Tab bietet Heute/Woche/Offen, Pending-Badge, chronologische responsive Liste, PII-Details sowie Telefonbuchung aus derselben Engine.
+- Operative Aktionen fuer `staff` und `admin`: Telefonbuchung (`source=ADMIN`), Bestaetigen, Ablehnen, Stornieren und Verschieben. Mutationserfolg und anschliessender Read-Refresh werden getrennt behandelt, damit ein Reload-Fehler keine erfolgreiche Schreiboperation als fehlgeschlagen darstellt.
+- Das sichtbarkeitsabhaengige 30-Sekunden-Polling aktualisiert den aktuell gewaehlten Wochen-Cursor direkt und setzt die Navigation nicht auf die aktuelle Woche zurueck.
+- Nur `admin`: Terminarten erstellen/aktualisieren (kein Delete), Wochenfenster erstellen/loeschen, `OPEN`-/`BLOCK`-Ausnahmen erstellen/loeschen und Vorlauf/Horizont aktualisieren. Raster und Zeitzone bleiben in V1 fest.
+- Jede Action autorisiert bei jedem Aufruf neu: operative Actions beginnen mit `requireAuth()`, Konfigurations-Actions mit `requireAdmin()`. Sichtbarkeit im Client ist kein Berechtigungsersatz.
+- Audit-Aktionen sind `CREATE_APPOINTMENT`, `CONFIRM_APPOINTMENT`, `REJECT_APPOINTMENT`, `CANCEL_APPOINTMENT`, `RESCHEDULE_APPOINTMENT`, `CREATE_APPOINTMENT_TYPE`, `UPDATE_APPOINTMENT_TYPE`, `CREATE_WEEKLY_AVAILABILITY`, `DELETE_WEEKLY_AVAILABILITY`, `CREATE_AVAILABILITY_EXCEPTION`, `DELETE_AVAILABILITY_EXCEPTION`, `UPDATE_BOOKING_SETTINGS`. Details enthalten interne IDs/Status, keine Patienten-PII, Codes oder Tokens.
+
 ### Admin-Dashboard-Datenfluss
 
 - `(protected)/layout.tsx` sichert die Route ueber `getServerSession()`
@@ -222,6 +267,15 @@ Wichtige Schemas:
 | Funktion | Input | Output | Bemerkung |
 | --- | --- | --- | --- |
 | `submitContactForm()` | strukturierte Formdaten | `{ success, error? }` | serverseitig validiert, rate-limitiert, transaktional |
+| `getPublicAppointmentTypes()` | - | `PublicAppointmentTypeDto[]` | nur aktive, online buchbare Typen |
+| `getPublicAppointmentAvailability()` | Typ-ID, optionaler Cursor | `AppointmentResult<AppointmentAvailabilityDto>` | serverberechnete, paginierte freie Slots |
+| `bookPublicAppointment()` | Typ, Zeitpunkt, Telefon-/Namensdaten, Consent, Honeypot | `AppointmentResult<PublicAppointmentBookingDto>` | rate-limitiert, vollstaendige transaktionale Revalidation, einmaliger Management-Code |
+| `verifyAppointmentManagementCode()` | `{ code }` | `AppointmentResult<ManagedAppointmentDto>` | Code-Hash-Vergleich und Session-Cookie-Austausch |
+| `getManagedAppointment()` | Session-Cookie | `AppointmentResult<ManagedAppointmentDto>` | keine ID-basierte Autorisierung |
+| `getManagedAppointmentAvailability()` | optionaler Cursor + Session | `AppointmentResult<AppointmentAvailabilityDto>` | schliesst eigene Belegung aus |
+| `rescheduleManagedAppointment()` | `{ startAt }` + Session | `AppointmentResult<ManagedAppointmentDto>` | atomare Slot-Verschiebung mit erneuter Policy-Pruefung |
+| `cancelManagedAppointment()` | Session | `AppointmentResult<ManagedAppointmentDto>` | erhaelt Datensatz, gibt Slots frei |
+| `endAppointmentManagementSession()` | Session | `AppointmentResult<null>` | loescht DB-Session und Cookie |
 
 #### Geschuetzt (`requireAuth()`)
 
@@ -229,6 +283,11 @@ Wichtige Schemas:
 | --- | --- | --- | --- |
 | `getContactRequests()` | optionaler Cursor | `ContactRequest[]` | 50er-Seiten, sortiert nach `createdAt desc`, `id desc` |
 | `mutateContactRequests()` | `{ ids, action }` | `{ success, error? }` | einheitliche transaktionale Mutation fuer Einzel- und Sammelaktionen; aktualisiert oder loescht atomar, schreibt Delete-Audit-Logs pro Request und revalidiert `/admin` nach Erfolg |
+| `getAdminAppointmentDashboard()` | optional `{ weekStart }` | `AdminAppointmentDashboardDto` | Heute/Woche/Pending plus aktive interne Terminarten |
+| `getAdminAppointmentAvailability()` | Typ-ID, optional Cursor/Termin-ID | `AppointmentResult<AppointmentAvailabilityDto>` | interne Typen; eigene Slots bei Verschiebung ausgeschlossen |
+| `createAdminAppointment()` | Typ, Zeitpunkt, Patientendaten, Consent | `AppointmentResult<AdminAppointmentDto>` | gleiche Engine/Status-Policy, `source=ADMIN`, Audit |
+| `mutateAdminAppointment()` | Termin-ID, Revision, `CONFIRM|REJECT|CANCEL` | `AppointmentResult<AdminAppointmentDto>` | Status-/Revision-CAS, Release und Audit in derselben Transaktion |
+| `rescheduleAdminAppointment()` | Termin-ID, Revision, Zeitpunkt | `AppointmentResult<AdminAppointmentDto>` | atomare Verschiebung und Audit |
 
 #### Admin-only (`requireAdmin()`)
 
@@ -238,6 +297,11 @@ Wichtige Schemas:
 | `deleteUser()` | `id` | `{ success, error? }` | blockiert Self-Delete und Admin-Loeschung |
 | `getUsers()` | - | `UserAccount[]` | Dashboard-Rollenmodell `admin | staff | unknown` |
 | `getAuditLogs()` | - | `AuditLog[]` | letzte 100 Eintraege + Retention-Cleanup |
+| `getAppointmentConfiguration()` | - | `AppointmentConfigurationDto` | Settings, Typen, Wochenfenster und kommende Ausnahmen |
+| `createAppointmentType()` / `updateAppointmentType()` | validierte Typdaten | `AppointmentResult<AdminAppointmentTypeDto>` | kein Terminart-Delete; Deaktivierung erhaelt Historie |
+| `createWeeklyAvailability()` / `deleteWeeklyAvailability()` | Intervall bzw. ID | `AppointmentResult<...>` | transaktional mit Audit |
+| `createAvailabilityException()` / `deleteAvailabilityException()` | lokales `OPEN|BLOCK`-Intervall bzw. ID | `AppointmentResult<...>` | transaktional mit Audit |
+| `updateBookingSettings()` | Vorlauf und Horizont | `AppointmentResult<AppointmentSettingsDto>` | erzwingt 15 Minuten und `Europe/Berlin` |
 
 ### `after()`-Jobs
 
@@ -283,10 +347,10 @@ Dashboard-spezifische Darstellung:
 
 ### Berechtigungen
 
-| Rolle | Anfragen | Benutzer | Audit-Logs |
-| --- | --- | --- | --- |
-| `admin` | ja | ja | ja |
-| `staff` | ja | nein | nein |
+| Rolle | Anfragen | Termine operativ | Terminkonfiguration | Benutzer | Audit-Logs |
+| --- | --- | --- | --- | --- | --- |
+| `admin` | ja | ja | ja | ja | ja |
+| `staff` | ja | ja | nein | nein | nein |
 
 Wenn ein eingeloggter Nutzer waehrend der Laufzeit Admin-Rechte verliert, springt das Dashboard auf den Requests-Tab zurueck und blendet privilegierte Tabs aus.
 
@@ -330,6 +394,10 @@ Aktuelle Schutzmechanismen:
 | --- | --- | --- |
 | Kontaktformular | 3 Requests pro Stunde | `contact:<ip>` |
 | Client-Error-Ingestion | 10 Requests pro 10 Minuten | `client-error:<ip>` |
+| Termin-Verfuegbarkeit (oeffentlich/Patient) | 60 Requests pro 10 Minuten | `appointment-availability:<ip>` |
+| Oeffentliche Terminbuchung | 5 Requests pro Stunde | `appointment-book:<ip>` |
+| Management-Code | 5 Versuche pro 15 Minuten | `appointment-access:<ip>` |
+| Patienten-Mutationen | 10 Requests pro Stunde | `appointment-book:<ip>` |
 
 Eigenschaften:
 
@@ -376,6 +444,8 @@ Aktueller Datenschutzstatus:
 - Cookie-Banner ist rein informativ und speichert keine Entscheidung in Cookie oder `localStorage`
 - Kontaktformulardaten werden nur fuer die Bearbeitung gespeichert
 - Audit-Logs enthalten keine Klar-IP und keine Kontaktinhalte
+- Termin-Audit-Logs enthalten nur Actor, Aktion, interne Termin-/Konfigurations-ID und Status; keine Patientennamen, Telefonnummern, Codes oder Tokens
+- Management-Code und Session-Token werden nur gehasht persistiert; das Cookie ist `HttpOnly`, `SameSite=Lax`, auf `/termin` begrenzt und in Produktion `Secure`
 - Audit-Logs koennen nicht manuell ueber das UI geloescht werden
 - Retention fuer Audit-Logs: automatische Loeschung nach 6 Monaten in `getAuditLogs()`
 
@@ -395,6 +465,12 @@ Aktueller Datenschutzstatus:
 | WebServer | startet `npm run dev` |
 | Parallelisierung | seriell bzw. nicht voll parallel, um Rate-Limit-/State-Flakes zu vermeiden |
 | DB-Helfer | `tests/e2e/helpers/db-cleanup.ts` |
+| Server-Isolation | `reuseExistingServer: false`; ein bereits laufender Server wird nie uebernommen |
+| Fail-closed Guard | Marker `E2E_DISPOSABLE_DB_CONFIRMED=1`, Loopback-Host und DB-Name mit `_test`, `-test`, `_e2e` oder `-e2e` sind gemeinsam erforderlich |
+
+`scripts/run-local-env.mjs` laedt ausschliesslich `.env.test.local`, validiert PostgreSQL-Protokoll, Loopback, expliziten Testnamen, Credentials, NextAuth-Secret und `TRUST_PROXY=false` und setzt erst danach den Marker fuer Kindprozesse. `playwright.config.ts` wiederholt Host-/Namens-/Markerpruefung beim Laden. Jeder schreibende DB-Helfer prueft dieselben Grenzen vor dem ersten Prisma-Aufruf. Der terminbezogene Reset loescht ausschliesslich Terminmodelle und `appointment-*`-Rate-Limit-Buckets; Kontakt-, Benutzer- und Auditdaten werden nicht global mitgeloescht.
+
+`playwright-report/` und `test-results/` sind ignorierte lokale Artefakte, weil HTML-Reports, Traces oder Screenshots Formularwerte und Testzugangsdaten enthalten koennen.
 
 ### Aktuelle Specs
 
@@ -405,6 +481,9 @@ Aktueller Datenschutzstatus:
 - `admin-logic.spec.ts`
 - `role-visibility.spec.ts`
 - `chaos.spec.ts`
+- `appointment-booking.spec.ts`
+- `appointment-management.spec.ts`
+- `appointment-admin.spec.ts`
 
 ### Abgedeckte Kernfaelle
 
@@ -414,13 +493,25 @@ Aktueller Datenschutzstatus:
 - Request-Management mit completion-coupled Einzel-/Bulk-Aktionen, sichtbaren Pending-Zustaenden, UI-Refresh bei Fehlschlag und atomarem Bulk-Failure-Verhalten
 - Security-Haertung des Client-Error-Endpunkts
 - UI-Rollback nach fehlgeschlagenen Server Actions
+- AUTO/MANUAL-Buchung, Dauer-/Snapshot-/Slot-Konsistenz und interne versus online buchbare Typen
+- Revalidation nach Slotwahl fuer geschlossenes Fenster, `BLOCK`, Mindestvorlauf, Horizont, Deaktivierung und entfernte Online-Freigabe
+- Globale Ueberschneidungen und echte Zwei-Client-Konkurrenz mit exakt einem Gewinner sowie ohne Teilzustand
+- DST-Fail-Closed fuer nicht existente/mehrdeutige Berliner 02:xx-Zeiten
+- Klartext-Code versus DB-ID/gespeicherter Hash, HttpOnly-Session, Token-Isolation und Invalidierung alter Sessions
+- Exaktes 256-Bit-Codeformat, 20-Minuten-Cookie/DB-Ablauf, abgelaufene Mutationssession und Access-Rate-Limit
+- Idempotente Stornierung, gesperrte historische Termine, unveraenderliche Typ-Snapshots, MANUAL-Policy bei Verschiebung, atomare Slot-Umlagerung und Collision-Rollback
+- Revision-CAS durch Replay einer bereits verbrauchten Admin-Mutation
+- Staff-Terminbetrieb, Admin-Konfiguration, anonymes Action-Replay, Staff-Replay einer Admin-Action und Audit-Aktionen
+- `PENDING` blockiert Kapazitaet bis zur Admin-Ablehnung; Ablehnung erhaelt den Termin und gibt alle Slots frei
 
 ### Testbefehle
 
 ```bash
-npm run test:e2e
-npm run test:e2e -- --reporter=list
+npm run test:e2e:local
+npm run test:e2e:local -- --reporter=list
 ```
+
+Direktes `npm run test:e2e` ist absichtlich fail-closed, solange Marker und sichere Zielpruefung nicht nachweislich gesetzt sind. In dieser Implementierungsrunde bestanden Prisma-Generate/-Validate, ESLint, TypeScript und der Produktions-Build. Der finale Build verwendete eine lokale Dummy-URL auf einem unbenutzten Loopback-Port; die bestehende Prisma-Warmup-Logik konnte daher keine DB-Verbindung, Abfrage oder Mutation ausfuehren. `db push`, Seed und E2E blieben mangels nachgewiesener Wegwerf-Datenbank **blocked / not run**; die neuen Specs werden nicht als bestanden dokumentiert.
 
 ---
 
@@ -457,6 +548,9 @@ Ohne diese Kombination plus `TRUST_PROXY=true` fail-closed:
 | `ADMIN_PASSWORD` | nur Seed | Initiales Admin-Passwort |
 | `TRUST_PROXY` | self-hosted reverse proxy | vertraute Proxy-Header aktivieren |
 | `LOG_LEVEL` | optional | Pino-Level |
+| `E2E_DISPOSABLE_DB_CONFIRMED` | nur vom geprueften Local-Wrapper gesetzt | zweiter Fail-closed Marker fuer Playwright und schreibende Testhelfer |
+
+Lokale E2E-/Prisma-Kommandos verwenden `.env.test.local` mit denselben Variablennamen plus einer `DATABASE_URL`, deren Host Loopback und deren Datenbankname explizit als Test/E2E gekennzeichnet ist. Reale Werte werden nicht dokumentiert oder committet.
 
 ### npm-Skripte
 
@@ -470,6 +564,7 @@ Ohne diese Kombination plus `TRUST_PROXY=true` fail-closed:
 | `npm run prisma:push` | Schema in DB spiegeln |
 | `npm run prisma:seed` | Admin-Seed |
 | `npm run test:e2e` | Playwright |
+| `npm run test:e2e:local` | gepruefter `.env.test.local`-Wrapper + Playwright |
 
 ---
 
@@ -519,4 +614,4 @@ npm run dev
 
 ## Letzte Aktualisierung
 
-Dieses Dokument spiegelt den Stand nach Security/Privacy-Haertung, Logik- und Datenflusskorrekturen, Dead-Code-Cleanup sowie finaler Dokumentationsangleichung wider.
+Dieses Dokument spiegelt den Stand nach Einfuehrung der transaktionalen Online-/Admin-Terminbuchung, codebasierter Patientenverwaltung, rollengetrennter Terminkonfiguration, fail-closed E2E-Isolation sowie der zugehoerigen Security-/Privacy-Haertung wider. Die neue E2E-Suite ist statisch implementiert, aber mangels verifizierter Wegwerf-Datenbank in dieser Runde nicht ausgefuehrt.

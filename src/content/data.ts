@@ -57,6 +57,15 @@ interface PublicContent {
   };
   contact: {
     eyebrow: string;
+    choiceTitle: string;
+    choiceDescription: string;
+    bookingChoiceTitle: string;
+    bookingChoiceDescription: string;
+    bookingChoiceAction: string;
+    requestChoiceTitle: string;
+    requestChoiceDescription: string;
+    requestChoiceAction: string;
+    manageAppointmentLabel: string;
     title: string;
     description: string;
     phoneLabel: string;
@@ -91,6 +100,7 @@ interface PublicContent {
   footer: {
     contactHeading: string;
     legalHeading: string;
+    manageAppointmentLabel: string;
     rightsReservedLabel: string;
   };
   legal: {
@@ -117,6 +127,14 @@ interface PublicContent {
     };
     privacy: {
       title: string;
+    };
+    appointmentBooking: {
+      title: string;
+      description: string;
+    };
+    appointmentManagement: {
+      title: string;
+      description: string;
     };
   };
 }
@@ -151,7 +169,7 @@ export const publicContent = {
       { href: "#sprechzeiten", label: "Sprechzeiten" },
       { href: "#kontakt", label: "Kontakt" },
     ],
-    contactButtonLabel: "Termin anfragen",
+    contactButtonLabel: "Termin & Kontakt",
     mobileMenuLabel: "Menü öffnen",
   },
   hero: {
@@ -172,8 +190,17 @@ export const publicContent = {
   },
   contact: {
     eyebrow: "Kontakt",
-    title: "Termine online anfragen",
-    description: "Kein langes Warten am Telefon – senden Sie uns Ihre Anfrage bequem online. Wir melden uns schnellstmöglich bei Ihnen zurück.",
+    choiceTitle: "Wie möchten Sie uns erreichen?",
+    choiceDescription: "Buchen Sie einen verfügbaren Termin direkt online oder senden Sie uns wie gewohnt eine unverbindliche Anfrage.",
+    bookingChoiceTitle: "Termin direkt buchen",
+    bookingChoiceDescription: "Wählen Sie Terminart und freien Zeitpunkt aus. Dafür benötigen Sie weder Konto noch E-Mail-Adresse.",
+    bookingChoiceAction: "Freie Termine ansehen",
+    requestChoiceTitle: "Anfrage senden",
+    requestChoiceDescription: "Für Rückruf, Rezept, Überweisung oder einen Terminwunsch ohne passenden Online-Termin.",
+    requestChoiceAction: "Zum Kontaktformular",
+    manageAppointmentLabel: "Bereits gebucht? Termin verwalten",
+    title: "Anfrage senden",
+    description: "Senden Sie uns Ihr Anliegen bequem online. Wir melden uns schnellstmöglich telefonisch bei Ihnen zurück.",
     phoneLabel: "Telefon",
     addressLabel: "Adresse",
     successTitle: "Vielen Dank für Ihre Anfrage!",
@@ -188,7 +215,7 @@ export const publicContent = {
     requestTypeLabel: "Anliegen",
     requestTypePlaceholder: "Bitte auswählen",
     requestTypeOptions: [
-      { value: "appointment", label: "Termin vereinbaren" },
+      { value: "appointment", label: "Terminwunsch / kein passender Online-Termin" },
       { value: "callback", label: "Rückruf gewünscht" },
       { value: "prescription", label: "Rezept / Überweisung" },
       { value: "other", label: "Sonstiges" },
@@ -219,6 +246,7 @@ export const publicContent = {
   footer: {
     contactHeading: "Kontakt",
     legalHeading: "Rechtliches",
+    manageAppointmentLabel: "Termin verwalten",
     rightsReservedLabel: "Alle Rechte vorbehalten.",
   },
   legal: {
@@ -252,6 +280,14 @@ export const publicContent = {
     },
     privacy: {
       title: "Datenschutzerklärung | Zahnarztpraxis Dr. Peter Neumann",
+    },
+    appointmentBooking: {
+      title: "Termin online buchen | Zahnarztpraxis Dr. Peter Neumann",
+      description: "Buchen Sie einen verfügbaren Termin bei der Zahnarztpraxis Dr. Peter Neumann direkt online.",
+    },
+    appointmentManagement: {
+      title: "Termin verwalten | Zahnarztpraxis Dr. Peter Neumann",
+      description: "Rufen Sie Ihren gebuchten Termin mit Ihrem persönlichen Zugangscode auf.",
     },
   },
 } as const satisfies PublicContent;

@@ -156,6 +156,13 @@ test.describe("Admin Dashboard", () => {
     await expect(page.getByText("Erledigt", { exact: true })).toBeVisible();
     await expect(page.getByText("Patientenanfragen")).toBeVisible();
     await expect(page.getByText("DSGVO-Hinweis")).toBeVisible();
+
+    const appointmentsTab = page.getByRole("button", { name: /Termine/i });
+    await expect(appointmentsTab).toBeVisible();
+    await appointmentsTab.click();
+    await expect(page.getByTestId("appointment-pending-count")).toBeVisible();
+    await expect(page.getByRole("button", { name: /Telefontermin/i })).toBeVisible();
+    await expect(page.getByRole("button", { name: /Buchung konfigurieren/i })).toBeVisible();
   });
 
   test("Aeltere Anfragen bleiben per Pagination erreichbar und verwaltbar", async ({ page }) => {

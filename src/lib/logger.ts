@@ -23,16 +23,29 @@ export const logger = pino({
     paths: [
       // Kontaktformular-Payload
       "data.email", "data.password", "data.firstName", "data.lastName",
-      "data.phone", "data.message", "data.name",
+      "data.phone", "data.message", "data.name", "data.details",
+      "data.managementCode", "data.managementCodeHash", "data.sessionToken", "data.tokenHash",
       // User-Payload
       "user.email", "user.password", "user.firstName", "user.lastName",
       "user.phone", "user.name",
       // Generischer Payload-Container
       "payload.email", "payload.password", "payload.phone",
-      "payload.firstName", "payload.lastName", "payload.name", "payload.message",
+      "payload.firstName", "payload.lastName", "payload.name", "payload.message", "payload.details",
+      "payload.managementCode", "payload.managementCodeHash", "payload.sessionToken", "payload.tokenHash",
+      // Termin-, Session- und Cookie-Kontexte
+      "appointment.firstName", "appointment.lastName", "appointment.phone", "appointment.details",
+      "appointment.managementCode", "appointment.managementCodeHash",
+      "session.token", "session.tokenHash", "session.managementCode",
+      "request.cookies", "request.headers.authorization", "request.headers.cookie",
       // Direct Top-Level PII (konservativ — NIEMALS für Struktur-Felder nutzen)
       "password",
       "userAgent",
+      "managementCode",
+      "managementCodeHash",
+      "sessionToken",
+      "tokenHash",
+      "cookie",
+      "authorization",
     ],
     censor: "[REDACTED]",
   },

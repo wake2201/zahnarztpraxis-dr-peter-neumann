@@ -37,9 +37,20 @@ const nextConfig: NextConfig = {
         headers: baseHeaders,
       },
       {
-        // noindex nur für den Admin-Bereich — öffentliche Seiten müssen
-        // für Suchmaschinen sichtbar bleiben (Praxis-SEO).
+        // Der geschützte Admin-Bereich darf nicht indexiert werden; die
+        // allgemeinen öffentlichen Praxisseiten bleiben für SEO sichtbar.
         source: "/admin/:path*",
+        headers: [
+          {
+            key: "X-Robots-Tag",
+            value: "noindex, nofollow, nosnippet, noarchive, noimageindex",
+          },
+        ],
+      },
+      {
+        // Buchungs- und Verwaltungsseiten enthalten transaktionale bzw.
+        // patientenbezogene Zustände und sollen nicht indexiert werden.
+        source: "/termin/:path*",
         headers: [
           {
             key: "X-Robots-Tag",

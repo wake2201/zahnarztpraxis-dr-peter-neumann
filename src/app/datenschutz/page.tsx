@@ -97,13 +97,49 @@ export default function DatenschutzPage() {
 
           <section>
             <h2 className="text-xl font-semibold text-slate-800 mb-3">
-              4. Cookies
+              4. Online-Terminbuchung und Terminverwaltung
+            </h2>
+            <p className="text-slate-600 leading-relaxed">
+              Wenn Sie einen Termin online buchen, verarbeiten wir die von
+              Ihnen eingegebenen Angaben (Vorname, Nachname, Telefonnummer,
+              Terminart und gew&auml;hlter Zeitpunkt sowie gegebenenfalls
+              zus&auml;tzliche Informationen), um den Termin anzulegen,
+              durchzuf&uuml;hren und zu verwalten. Eine E-Mail-Adresse oder ein
+              Benutzerkonto ist daf&uuml;r nicht erforderlich.
+            </p>
+            <p className="text-slate-600 leading-relaxed mt-2">
+              Nach der Buchung erhalten Sie einen pers&ouml;nlichen Zugangscode.
+              Der Code wird nicht im Klartext gespeichert. Er dient dazu,
+              Ihren Terminstatus aufzurufen und zul&auml;ssige &Auml;nderungen oder
+              eine Absage vorzunehmen. Bewahren Sie ihn daher vor dem Zugriff
+              durch Dritte gesch&uuml;tzt auf.
+            </p>
+            <p className="text-slate-600 leading-relaxed mt-2">
+              <strong>Rechtsgrundlage:</strong> Art. 6 Abs. 1 lit. a DSGVO
+              (Einwilligung) sowie, soweit die Verarbeitung der Vorbereitung
+              oder Durchf&uuml;hrung einer Behandlung dient, Art. 6 Abs. 1 lit. b
+              DSGVO. Termindaten werden nur so lange gespeichert, wie dies zur
+              Terminverwaltung und aufgrund gesetzlicher Pflichten erforderlich
+              ist.
+            </p>
+          </section>
+
+          <section>
+            <h2 className="text-xl font-semibold text-slate-800 mb-3">
+              5. Cookies
             </h2>
             <p className="text-slate-600 leading-relaxed">
               Diese Website verwendet ausschlie&szlig;lich technisch notwendige
               Cookies, die f&uuml;r den ordnungsgem&auml;&szlig;en Betrieb der
               Website erforderlich sind. Es werden keine Tracking-Cookies oder
               Cookies von Drittanbietern eingesetzt.
+            </p>
+            <p className="text-slate-600 leading-relaxed mt-2">
+              Nach erfolgreicher Eingabe eines Termin-Zugangscodes wird ein
+              kurzlebiges, technisch notwendiges und vor clientseitigem
+              Auslesen gesch&uuml;tztes Sitzungscookie gesetzt. Es erm&ouml;glicht die
+              Terminverwaltung, wird nicht zu Trackingzwecken verwendet und
+              verliert nach kurzer Zeit seine G&uuml;ltigkeit.
             </p>
             <p className="text-slate-600 leading-relaxed mt-2">
               Der eingeblendete Datenschutzhinweis dient nur der Information und
@@ -114,7 +150,7 @@ export default function DatenschutzPage() {
 
           <section>
             <h2 className="text-xl font-semibold text-slate-800 mb-3">
-              5. Keine externen Dienste
+              6. Keine externen Dienste
             </h2>
             <p className="text-slate-600 leading-relaxed">
               Diese Website l&auml;dt keine externen Ressourcen wie Google Fonts,
@@ -127,7 +163,7 @@ export default function DatenschutzPage() {
 
           <section>
             <h2 className="text-xl font-semibold text-slate-800 mb-3">
-              6. Ihre Rechte
+              7. Ihre Rechte
             </h2>
             <p className="text-slate-600 leading-relaxed">
               Sie haben jederzeit das Recht auf:

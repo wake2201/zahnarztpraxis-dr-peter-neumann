@@ -46,7 +46,7 @@ export function Navbar() {
           </Link>
 
           {/* Desktop Navigation */}
-          <nav className="hidden md:flex items-center gap-1">
+          <nav className="hidden lg:flex items-center gap-1">
             {navigation.links.map((link) => (
               <Link
                 key={link.href}
@@ -59,7 +59,7 @@ export function Navbar() {
           </nav>
 
           {/* CTA Desktop */}
-          <div className="hidden md:flex items-center gap-3">
+          <div className="hidden lg:flex items-center gap-3">
             <a
               href={practice.phone.href}
               className="flex items-center gap-2 text-sm font-medium text-slate-600 hover:text-primary transition-colors"
@@ -75,7 +75,7 @@ export function Navbar() {
           {/* Mobile Hamburger */}
           <button
             onClick={() => setMobileOpen(!mobileOpen)}
-            className="md:hidden p-2.5 min-w-[44px] min-h-[44px] rounded-lg text-slate-600 hover:bg-slate-100 transition-colors flex items-center justify-center"
+            className="lg:hidden p-2.5 min-w-[44px] min-h-[44px] rounded-lg text-slate-600 hover:bg-slate-100 transition-colors flex items-center justify-center"
             aria-label={navigation.mobileMenuLabel}
           >
             {mobileOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
@@ -90,7 +90,7 @@ export function Navbar() {
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: "auto" }}
             exit={{ opacity: 0, height: 0 }}
-            className="md:hidden bg-white border-t border-slate-100 overflow-hidden"
+            className="lg:hidden bg-white border-t border-slate-100 overflow-hidden"
           >
             <div className="px-4 py-4 space-y-2">
               {navigation.links.map((link) => (

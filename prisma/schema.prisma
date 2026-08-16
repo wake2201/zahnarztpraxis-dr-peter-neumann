@@ -10,6 +10,28 @@ datasource db {
   provider = "postgresql"
 }
 
+enum AppointmentConfirmationMode {
+  AUTO
+  MANUAL
+}
+
+enum AppointmentStatus {
+  PENDING
+  CONFIRMED
+  REJECTED
+  CANCELLED
+}
+
+enum AppointmentSource {
+  ONLINE
+  ADMIN
+}
+
+enum AppointmentAvailabilityExceptionKind {
+  OPEN
+  BLOCK
+}
+
 /// Kontaktanfragen von Patienten über das Website-Formular.
 /// DSGVO-Hinweis: Einträge können unwiderruflich gelöscht werden (Art. 17 DSGVO – Recht auf Löschung).
 model ContactRequest {
@@ -28,7 +50,7 @@ model ContactRequest {
 }
 
 /// Admin-/Mitarbeiter-Benutzer für den geschützten Verwaltungsbereich.
-/// Rollen: "admin" (voller Zugriff, Benutzerverwaltung, Logs) | "staff" (Anfragen verwalten)
+/// Rollen: "admin" (inkl. Konfiguration, Benutzerverwaltung, Logs) | "staff" (Anfragen und Termine verwalten)
 model User {
   id        String   @id @default(cuid())
   email     String   @unique
@@ -53,13 +75,13 @@ model LoginAttempt {
   @@map("login_attempts")
 }
 
-/// Audit-Log: Protokolliert Admin-Aktionen (Löschungen, Logins, Account-Verwaltung).
+/// Audit-Log: Protokolliert sicherheitsrelevante Verwaltungs- und Terminaktionen ohne Patienten-PII.
 /// Nur für Admin-Benutzer sichtbar.
 model AuditLog {
   id        String   @id @default(cuid())
   userId    String   @map("user_id")
   userName  String   @map("user_name")
-  action    String   // DELETE_REQUEST | LOGIN | CREATE_USER | DELETE_USER
+  action    String   // Login-, Benutzer-, Anfrage-, Termin- und Buchungskonfigurationsaktionen
   details   String?  @db.Text
   createdAt DateTime @default(now()) @map("created_at")
 
@@ -67,7 +89,7 @@ model AuditLog {
   @@map("audit_logs")
 }
 
-/// DB-basiertes Rate-Limiting für öffentliche Endpunkte (Kontaktformular).
+/// DB-basiertes Rate-Limiting für öffentliche Kontakt-, Fehler- und Terminendpunkte.
 /// Ersetzt die In-Memory Map, damit das Limit serverless-/multi-instance-sicher ist.
 model RateLimit {
   id        String   @id @default(cuid())
@@ -77,4 +99,117 @@ model RateLimit {
 
   @@index([lastReset])
   @@map("rate_limits")
+}
+
+/// Zentrale, bewusst als Singleton verwendete Buchungskonfiguration.
+model AppointmentSettings {
+  id                   String   @id @default("default")
+  slotMinutes          Int      @default(15) @map("slot_minutes")
+  minimumNoticeMinutes Int      @default(240) @map("minimum_notice_minutes")
+  bookingHorizonDays   Int      @default(60) @map("booking_horizon_days")
+  timeZone             String   @default("Europe/Berlin") @map("time_zone")
+  createdAt            DateTime @default(now()) @map("created_at")
+  updatedAt            DateTime @updatedAt @map("updated_at")
+
+  @@map("appointment_settings")
+}
+
+/// Administrativ gepflegte Terminart. Bestehende Termine behalten Snapshots.
+model AppointmentType {
+  id               String                      @id @default(cuid())
+  name             String
+  description      String?                     @db.Text
+  durationMinutes  Int                         @map("duration_minutes")
+  active           Boolean                     @default(true)
+  onlineBookable   Boolean                     @default(true) @map("online_bookable")
+  confirmationMode AppointmentConfirmationMode @map("confirmation_mode")
+  createdAt        DateTime                    @default(now()) @map("created_at")
+  updatedAt        DateTime                    @updatedAt @map("updated_at")
+  appointments     Appointment[]
+
+  @@index([active, onlineBookable])
+  @@map("appointment_types")
+}
+
+/// Wiederkehrendes lokales Wochenfenster fuer die Online-Buchung.
+model AppointmentWeeklyAvailability {
+  id          String   @id @default(cuid())
+  weekday     Int
+  startMinute Int      @map("start_minute")
+  endMinute   Int      @map("end_minute")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@unique([weekday, startMinute, endMinute])
+  @@index([weekday])
+  @@map("appointment_weekly_availability")
+}
+
+/// Datumsbezogene Oeffnung oder Sperre; BLOCK hat in der Engine Vorrang.
+model AppointmentAvailabilityException {
+  id          String                                   @id @default(cuid())
+  localDate   DateTime                                 @db.Date @map("local_date")
+  kind        AppointmentAvailabilityExceptionKind
+  startMinute Int                                      @map("start_minute")
+  endMinute   Int                                      @map("end_minute")
+  createdAt   DateTime                                 @default(now()) @map("created_at")
+  updatedAt   DateTime                                 @updatedAt @map("updated_at")
+
+  @@unique([localDate, kind, startMinute, endMinute])
+  @@index([localDate, kind])
+  @@map("appointment_availability_exceptions")
+}
+
+/// Termin inklusive historischer Typ-Snapshots und Patientenkontaktdaten.
+model Appointment {
+  id                       String                      @id @default(cuid())
+  appointmentTypeId        String                      @map("appointment_type_id")
+  typeNameSnapshot         String                      @map("type_name_snapshot")
+  durationMinutesSnapshot  Int                         @map("duration_minutes_snapshot")
+  confirmationModeSnapshot AppointmentConfirmationMode @map("confirmation_mode_snapshot")
+  firstName                String                      @map("first_name")
+  lastName                 String                      @map("last_name")
+  countryCode              String                      @default("+49") @map("country_code")
+  phone                    String
+  details                  String?                     @db.Text
+  gdprConsent              Boolean                     @map("gdpr_consent")
+  consentedAt              DateTime                    @default(now()) @db.Timestamptz(3) @map("consented_at")
+  startAt                  DateTime                    @db.Timestamptz(3) @map("start_at")
+  endAt                    DateTime                    @db.Timestamptz(3) @map("end_at")
+  status                   AppointmentStatus
+  source                   AppointmentSource
+  managementCodeHash       String?                     @unique @db.Char(64) @map("management_code_hash")
+  revision                 Int                         @default(0)
+  createdAt                DateTime                    @default(now()) @db.Timestamptz(3) @map("created_at")
+  updatedAt                DateTime                    @updatedAt @db.Timestamptz(3) @map("updated_at")
+  appointmentType          AppointmentType             @relation(fields: [appointmentTypeId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  slots                    AppointmentSlot[]
+  accessSession            AppointmentAccessSession?
+
+  @@index([status, startAt])
+  @@index([appointmentTypeId, startAt])
+  @@map("appointments")
+}
+
+/// Eine globale Kapazitaetseinheit pro UTC-15-Minuten-Startzeit.
+model AppointmentSlot {
+  appointmentId String      @map("appointment_id")
+  slotStartAt   DateTime    @unique @db.Timestamptz(3) @map("slot_start_at")
+  appointment   Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  @@id([appointmentId, slotStartAt])
+  @@map("appointment_slots")
+}
+
+/// Kurzlebige, gehashte Patientensession; genau eine aktive Session pro Termin.
+model AppointmentAccessSession {
+  id            String      @id @default(cuid())
+  appointmentId String      @unique @map("appointment_id")
+  tokenHash     String      @unique @db.Char(64) @map("token_hash")
+  expiresAt     DateTime    @db.Timestamptz(3) @map("expires_at")
+  createdAt     DateTime    @default(now()) @db.Timestamptz(3) @map("created_at")
+  appointment   Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  @@index([expiresAt])
+  @@map("appointment_access_sessions")
 }

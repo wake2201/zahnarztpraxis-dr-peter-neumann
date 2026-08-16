@@ -53,6 +53,18 @@ function actionBadgeClass(action: string): string {
     case "LOGIN": return "bg-blue-100 text-blue-700";
     case "DELETE_REQUEST": return "bg-red-100 text-red-700";
     case "CREATE_USER": return "bg-green-100 text-green-700";
+    case "CREATE_APPOINTMENT": return "bg-emerald-100 text-emerald-700";
+    case "CONFIRM_APPOINTMENT": return "bg-green-100 text-green-700";
+    case "REJECT_APPOINTMENT":
+    case "CANCEL_APPOINTMENT": return "bg-red-100 text-red-700";
+    case "RESCHEDULE_APPOINTMENT": return "bg-blue-100 text-blue-700";
+    case "CREATE_APPOINTMENT_TYPE":
+    case "UPDATE_APPOINTMENT_TYPE":
+    case "CREATE_WEEKLY_AVAILABILITY":
+    case "DELETE_WEEKLY_AVAILABILITY":
+    case "CREATE_AVAILABILITY_EXCEPTION":
+    case "DELETE_AVAILABILITY_EXCEPTION":
+    case "UPDATE_BOOKING_SETTINGS": return "bg-violet-100 text-violet-700";
     default: return "bg-slate-100 text-slate-700";
   }
 }

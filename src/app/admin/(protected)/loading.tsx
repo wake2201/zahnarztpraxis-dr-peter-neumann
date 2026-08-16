@@ -17,6 +17,11 @@ export default function AdminLoading() {
           </div>
           <div className="h-10 w-28 bg-slate-100 rounded-lg animate-pulse" />
         </div>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-1 flex gap-3 overflow-hidden">
+          {[1, 2, 3, 4].map((item) => (
+            <div key={item} className="h-9 w-24 bg-slate-100 rounded-t-lg animate-pulse shrink-0" />
+          ))}
+        </div>
       </header>
 
       {/* Skeleton Content */}

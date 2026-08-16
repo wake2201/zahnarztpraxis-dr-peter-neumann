@@ -20,6 +20,7 @@ async function loginAs(page: Page, email: string, password: string) {
 function tabLocators(page: Page) {
   return {
     requestsTab: page.getByRole("button", { name: /Anfragen/i }),
+    appointmentsTab: page.getByRole("button", { name: /Termine/i }),
     usersTab: page.getByRole("button", { name: /Benutzer/i }),
     logsTab: page.getByRole("button", { name: /Aktivitaetslog|Aktivitätslog/i }),
   };
@@ -51,28 +52,31 @@ test.describe("Role Visibility & Normalization", () => {
   test("Admin user sees all tabs", async ({ page }) => {
     await loginAs(page, ADMIN_EMAIL, ADMIN_PASSWORD);
 
-    const { requestsTab, usersTab, logsTab } = tabLocators(page);
+    const { requestsTab, appointmentsTab, usersTab, logsTab } = tabLocators(page);
     await expect(requestsTab).toBeVisible();
+    await expect(appointmentsTab).toBeVisible();
     await expect(usersTab).toBeVisible();
     await expect(logsTab).toBeVisible();
   });
 
-  test("Staff user only sees the requests tab", async ({ page }) => {
+  test("Staff user sees requests and operational appointments, but no admin-only tabs", async ({ page }) => {
     await loginAs(page, STAFF_EMAIL, STAFF_PASSWORD);
 
-    const { requestsTab, usersTab, logsTab } = tabLocators(page);
+    const { requestsTab, appointmentsTab, usersTab, logsTab } = tabLocators(page);
     await expect(requestsTab).toBeVisible();
+    await expect(appointmentsTab).toBeVisible();
     await expect(usersTab).toBeHidden();
     await expect(logsTab).toBeHidden();
   });
 
-  test("Normalisierte Staff-Session bleibt nach Reload auf Requests-only beschränkt", async ({ page }) => {
+  test("Normalisierte Staff-Session bleibt nach Reload auf operative Tabs beschränkt", async ({ page }) => {
     await loginAs(page, STAFF_EMAIL, STAFF_PASSWORD);
     await page.reload();
     await expect(page.getByRole("button", { name: /Abmelden/i })).toBeVisible({ timeout: 15_000 });
 
-    const { requestsTab, usersTab, logsTab } = tabLocators(page);
+    const { requestsTab, appointmentsTab, usersTab, logsTab } = tabLocators(page);
     await expect(requestsTab).toBeVisible();
+    await expect(appointmentsTab).toBeVisible();
     await expect(usersTab).toBeHidden();
     await expect(logsTab).toBeHidden();
   });

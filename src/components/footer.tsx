@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Phone, MapPin, Heart } from "lucide-react";
+import { CalendarCheck, Phone, MapPin, Heart } from "lucide-react";
 import { publicContent } from "@/content/data";
 
 export function Footer() {
@@ -51,6 +51,15 @@ export function Footer() {
                     {practice.address.lineTwo}
                   </span>
                 </div>
+              </li>
+              <li>
+                <Link
+                  href="/termin"
+                  className="flex items-center gap-2 text-sm text-slate-400 transition-colors hover:text-white"
+                >
+                  <CalendarCheck className="h-4 w-4" aria-hidden="true" />
+                  {footer.manageAppointmentLabel}
+                </Link>
               </li>
             </ul>
           </div>

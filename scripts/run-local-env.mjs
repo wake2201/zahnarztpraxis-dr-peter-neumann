@@ -7,6 +7,7 @@ import dotenv from "dotenv";
 const rootDir = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const envFileName = ".env.test.local";
 const envPath = resolve(rootDir, envFileName);
+const disposableDatabaseNamePattern = /(?:^|[-_])(?:test|e2e)$/i;
 
 function writeLine(message) {
   process.stdout.write(`${message}\n`);
@@ -92,6 +93,14 @@ if (!parsedDatabaseUrl.pathname || parsedDatabaseUrl.pathname === "/") {
   fail("DATABASE_URL in .env.test.local muss einen Datenbanknamen enthalten.");
 }
 
+const databaseName = decodeURIComponent(parsedDatabaseUrl.pathname.slice(1));
+if (!disposableDatabaseNamePattern.test(databaseName)) {
+  fail(
+    "DATABASE_URL in .env.test.local muss auf eine explizite Testdatenbank enden " +
+      "(_test, -test, _e2e oder -e2e).",
+  );
+}
+
 if (!parsedDatabaseUrl.username || !parsedDatabaseUrl.password) {
   fail("DATABASE_URL in .env.test.local muss lokalen Benutzer und Passwort enthalten.");
 }
@@ -130,6 +139,7 @@ const child = spawn(process.execPath, [entrypointPath, ...toolArgs], {
     DOTENV_CONFIG_PATH: envPath,
     DOTENV_CONFIG_OVERRIDE: "true",
     DOTENV_CONFIG_QUIET: "true",
+    E2E_DISPOSABLE_DB_CONFIRMED: "1",
   },
 });
 

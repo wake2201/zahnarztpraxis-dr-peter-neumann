@@ -1,6 +1,13 @@
 import bcrypt from "bcryptjs";
 import { logger } from "../src/lib/logger";
 import { pool, prisma } from "../src/lib/prisma";
+import {
+  APPOINTMENT_SETTINGS_ID,
+  APPOINTMENT_SLOT_MINUTES,
+  APPOINTMENT_TIME_ZONE,
+  DEFAULT_BOOKING_HORIZON_DAYS,
+  DEFAULT_MINIMUM_NOTICE_MINUTES,
+} from "../src/lib/appointments/constants";
 
 const PASSWORD_COMPLEXITY =
   /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*(),.?":{}|<>])/;
@@ -39,6 +46,18 @@ async function main() {
   const hashedPassword = await bcrypt.hash(password, 12);
 
   const admin = await prisma.$transaction(async (tx) => {
+    await tx.appointmentSettings.upsert({
+      where: { id: APPOINTMENT_SETTINGS_ID },
+      update: {},
+      create: {
+        id: APPOINTMENT_SETTINGS_ID,
+        slotMinutes: APPOINTMENT_SLOT_MINUTES,
+        minimumNoticeMinutes: DEFAULT_MINIMUM_NOTICE_MINUTES,
+        bookingHorizonDays: DEFAULT_BOOKING_HORIZON_DAYS,
+        timeZone: APPOINTMENT_TIME_ZONE,
+      },
+    });
+
     return tx.user.upsert({
       where: { email },
       update: { password: hashedPassword, role: "admin" },

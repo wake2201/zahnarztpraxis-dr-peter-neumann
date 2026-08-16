@@ -1,21 +1,34 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import { signOut } from "next-auth/react";
-import { Inbox, LogOut, Heart, Users, Shield, ScrollText } from "lucide-react";
+import { CalendarDays, Inbox, LogOut, Heart, Users, Shield, ScrollText } from "lucide-react";
+import { AppointmentsTab } from "@/components/admin/appointments-tab";
 import { LogsTab } from "@/components/admin/logs-tab";
 import { RequestsTab } from "@/components/admin/requests-tab";
 import type { AuditLogEntry, ContactRequest, DashboardTab, UserAccount } from "@/components/admin/types";
 import { UsersTab } from "@/components/admin/users-tab";
 import { Button } from "@/components/ui/button";
-import { getContactRequests } from "@/lib/actions";
+import {
+  getAdminAppointmentDashboard,
+  getAppointmentConfiguration,
+  getContactRequests,
+} from "@/lib/actions";
+import type {
+  AdminAppointmentDashboardDto,
+  AdminAppointmentDashboardInput,
+  AppointmentConfigurationDto,
+} from "@/lib/appointments/types";
 
 const POLL_INTERVAL_MS = 30_000;
 const REQUESTS_PAGE_SIZE = 50;
 
 interface Props {
   requests: ContactRequest[];
+  appointmentDashboard: AdminAppointmentDashboardDto;
+  appointmentConfiguration: AppointmentConfigurationDto | null;
+  appointmentDashboardError: string;
+  appointmentConfigurationError: string;
   userName: string;
   userRole: string;
   users: UserAccount[];
@@ -24,19 +37,26 @@ interface Props {
 
 export function AdminDashboardClient({
   requests,
+  appointmentDashboard,
+  appointmentConfiguration,
+  appointmentDashboardError,
+  appointmentConfigurationError,
   userName,
   userRole,
   users,
   auditLogs,
 }: Props) {
   const isAdmin = userRole === "admin";
-  const router = useRouter();
   const [activeTab, setActiveTab] = useState<DashboardTab>("requests");
   const [requestItems, setRequestItems] = useState(requests);
   const [requestPageHistory, setRequestPageHistory] = useState<ContactRequest[][]>([]);
   const [hasOlderRequests, setHasOlderRequests] = useState(requests.length >= REQUESTS_PAGE_SIZE);
   const [isLoadingOlderRequests, setIsLoadingOlderRequests] = useState(false);
   const [requestPaginationError, setRequestPaginationError] = useState("");
+  const [appointmentDashboardData, setAppointmentDashboardData] = useState(appointmentDashboard);
+  const [appointmentConfigurationData, setAppointmentConfigurationData] = useState(appointmentConfiguration);
+  const [appointmentLoadError, setAppointmentLoadError] = useState(appointmentDashboardError);
+  const [appointmentConfigLoadError, setAppointmentConfigLoadError] = useState(appointmentConfigurationError);
 
   useEffect(() => {
     setRequestItems(requests);
@@ -46,7 +66,17 @@ export function AdminDashboardClient({
   }, [requests]);
 
   useEffect(() => {
-    if (!isAdmin && activeTab !== "requests") {
+    setAppointmentDashboardData(appointmentDashboard);
+    setAppointmentLoadError(appointmentDashboardError);
+  }, [appointmentDashboard, appointmentDashboardError]);
+
+  useEffect(() => {
+    setAppointmentConfigurationData(appointmentConfiguration);
+    setAppointmentConfigLoadError(appointmentConfigurationError);
+  }, [appointmentConfiguration, appointmentConfigurationError]);
+
+  useEffect(() => {
+    if (!isAdmin && activeTab !== "requests" && activeTab !== "appointments") {
       setActiveTab("requests");
     }
   }, [activeTab, isAdmin]);
@@ -55,13 +85,29 @@ export function AdminDashboardClient({
   // Vercel-Invocations und DB-Hits deutlich niedriger bleiben.
   useEffect(() => {
     const interval = setInterval(() => {
-      if (document.visibilityState === "visible" && requestPageHistory.length === 0) {
-        router.refresh();
+      if (document.visibilityState !== "visible") {
+        return;
+      }
+
+      if (activeTab === "appointments") {
+        void getAdminAppointmentDashboard({ weekStart: appointmentDashboardData.weekStart })
+          .then((nextDashboard) => {
+            setAppointmentDashboardData(nextDashboard);
+            setAppointmentLoadError("");
+          })
+          .catch(() => setAppointmentLoadError("Termine konnten nicht aktualisiert werden."));
+        return;
+      }
+
+      if (requestPageHistory.length === 0) {
+        void getContactRequests()
+          .then((nextRequests) => setRequestItems(nextRequests))
+          .catch(() => setRequestPaginationError("Anfragen konnten nicht aktualisiert werden."));
       }
     }, POLL_INTERVAL_MS);
 
     return () => clearInterval(interval);
-  }, [requestPageHistory.length, router]);
+  }, [activeTab, appointmentDashboardData.weekStart, requestPageHistory.length]);
 
   const unread = requestItems.filter((request) => !request.read).length;
 
@@ -108,6 +154,33 @@ export function AdminDashboardClient({
     setRequestPaginationError("");
   }
 
+  async function handleReloadAppointmentDashboard(input: AdminAppointmentDashboardInput = {}) {
+    try {
+      const nextDashboard = await getAdminAppointmentDashboard(input);
+      setAppointmentDashboardData(nextDashboard);
+      setAppointmentLoadError("");
+    } catch {
+      setAppointmentLoadError("Termine konnten nicht aktualisiert werden.");
+      throw new Error("Appointment dashboard reload failed");
+    }
+  }
+
+  async function handleReloadAppointmentConfiguration() {
+    if (!isAdmin) {
+      setAppointmentConfigurationData(null);
+      return;
+    }
+
+    try {
+      const nextConfiguration = await getAppointmentConfiguration();
+      setAppointmentConfigurationData(nextConfiguration);
+      setAppointmentConfigLoadError("");
+    } catch {
+      setAppointmentConfigLoadError("Die Terminkonfiguration konnte nicht aktualisiert werden.");
+      throw new Error("Appointment configuration reload failed");
+    }
+  }
+
   return (
     <div className="min-h-screen bg-slate-50">
       <header className="bg-white border-b border-slate-200 sticky top-0 z-10">
@@ -136,6 +209,15 @@ export function AdminDashboardClient({
               {unread > 0 && (
                 <span className="ml-1.5 px-1.5 py-0.5 bg-orange-100 text-orange-600 text-xs rounded-full font-bold">
                   {unread}
+                </span>
+              )}
+            </TabButton>
+            <TabButton active={activeTab === "appointments"} onClick={() => setActiveTab("appointments")}>
+              <CalendarDays className="w-4 h-4 inline mr-1.5" />
+              Termine
+              {appointmentDashboardData.pendingCount > 0 && (
+                <span className="ml-1.5 px-1.5 py-0.5 bg-amber-100 text-amber-700 text-xs rounded-full font-bold">
+                  {appointmentDashboardData.pendingCount}
                 </span>
               )}
             </TabButton>
@@ -168,6 +250,17 @@ export function AdminDashboardClient({
             onLoadOlderRequests={handleLoadOlderRequests}
           />
         )}
+        {activeTab === "appointments" && (
+          <AppointmentsTab
+            dashboard={appointmentDashboardData}
+            configuration={appointmentConfigurationData}
+            isAdmin={isAdmin}
+            dashboardError={appointmentLoadError}
+            configurationError={appointmentConfigLoadError}
+            onReloadDashboard={handleReloadAppointmentDashboard}
+            onReloadConfiguration={handleReloadAppointmentConfiguration}
+          />
+        )}
         {activeTab === "users" && isAdmin && <UsersTab users={users} />}
         {activeTab === "logs" && isAdmin && <LogsTab auditLogs={auditLogs} />}
       </main>
@@ -186,7 +279,9 @@ function TabButton({
 }) {
   return (
     <button
+      type="button"
       onClick={onClick}
+      aria-pressed={active}
       className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
         active ? "border-primary text-primary" : "border-transparent text-slate-500 hover:text-slate-700"
       }`}
