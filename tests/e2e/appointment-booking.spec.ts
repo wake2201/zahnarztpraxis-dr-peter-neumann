@@ -122,6 +122,26 @@ test.describe("Public appointment booking", () => {
     await disconnectPrisma();
   });
 
+  test("navigation from the deeply scrolled homepage starts the booking flow at the top", async ({ page }) => {
+    await createTestAppointmentType({ name: "E2E Scrollposition" });
+    await page.goto("/");
+
+    const bookingLink = page.getByRole("link", { name: /Termin direkt buchen/i });
+    await bookingLink.scrollIntoViewIfNeeded();
+    await expect(bookingLink).toBeInViewport();
+    expect(await page.evaluate(() => window.scrollY)).toBeGreaterThan(500);
+
+    await bookingLink.click();
+
+    await expect(page).toHaveURL(/\/termin\/buchen$/);
+    await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
+
+    await expect(page.locator("header").first()).toBeInViewport();
+    await expect(page.getByRole("heading", { level: 1, name: "Termin online buchen" })).toBeInViewport();
+    await expect(page.getByRole("navigation", { name: "Buchungsfortschritt" })).toBeInViewport();
+    await expect(page.getByText("Welche Terminart benötigen Sie?", { exact: true })).toBeInViewport();
+  });
+
   test("AUTO booking reserves the exact duration, stores snapshots and never exposes the code in the URL", async ({ page }) => {
     const firstName = `E2E-Termin-Auto-${Date.now()}`;
     const { appointmentType } = await configureOpenDay({

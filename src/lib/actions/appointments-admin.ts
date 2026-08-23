@@ -305,4 +305,3 @@ export async function updateBookingSettings(
     return { success: false, error: mutationError(error) };
   }
 }
-

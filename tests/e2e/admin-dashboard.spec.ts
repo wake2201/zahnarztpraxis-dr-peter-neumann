@@ -161,8 +161,10 @@ test.describe("Admin Dashboard", () => {
     await expect(appointmentsTab).toBeVisible();
     await appointmentsTab.click();
     await expect(page.getByTestId("appointment-pending-count")).toBeVisible();
-    await expect(page.getByRole("button", { name: /Telefontermin/i })).toBeVisible();
-    await expect(page.getByRole("button", { name: /Buchung konfigurieren/i })).toBeVisible();
+    await expect(page.getByRole("button", { name: /^Neuer Termin$/i })).toBeVisible();
+    await expect(page.getByRole("button", { name: /^Einstellungen$/i })).toBeVisible();
+    await expect(page.getByRole("dialog", { name: /Neuer Termin/i })).toHaveCount(0);
+    await expect(page.getByRole("region", { name: /Termin-Einstellungen/i })).toHaveCount(0);
   });
 
   test("Aeltere Anfragen bleiben per Pagination erreichbar und verwaltbar", async ({ page }) => {

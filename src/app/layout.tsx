@@ -35,7 +35,7 @@ export default async function RootLayout({
   await headers();
 
   return (
-    <html lang="de" className={inter.variable}>
+    <html lang="de" className={inter.variable} data-scroll-behavior="smooth">
       <body className="font-sans">{children}</body>
     </html>
   );

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
   CalendarDays,
@@ -11,15 +11,12 @@ import {
   Loader2,
   Phone,
   Plus,
-  RefreshCw,
+  Settings2,
   UserRound,
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import {
-  createAdminAppointment,
   getAdminAppointmentAvailability,
   mutateAdminAppointment,
   rescheduleAdminAppointment,
@@ -33,8 +30,9 @@ import type {
   AppointmentConfigurationDto,
   AppointmentStatusValue,
 } from "@/lib/appointments/types";
-import { EUROPEAN_COUNTRY_CODES } from "@/lib/country-codes";
+import { AdminAvailabilityPicker } from "./admin-availability-picker";
 import { AppointmentSettings } from "./appointment-settings";
+import { NewAppointmentDialog } from "./new-appointment-dialog";
 
 type AppointmentView = "today" | "week" | "pending";
 
@@ -118,45 +116,32 @@ export function AppointmentsTab({
   onReloadConfiguration,
 }: Props) {
   const [view, setView] = useState<AppointmentView>("today");
-  const [showManualForm, setShowManualForm] = useState(false);
+  const [showNewAppointment, setShowNewAppointment] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const newAppointmentTriggerRef = useRef<HTMLButtonElement>(null);
+  const settingsTriggerRef = useRef<HTMLButtonElement>(null);
   const [selectedAppointmentId, setSelectedAppointmentId] = useState<string | null>(null);
   const [pendingOperation, setPendingOperation] = useState("");
   const [operationError, setOperationError] = useState("");
   const [operationSuccess, setOperationSuccess] = useState("");
   const [confirmingAction, setConfirmingAction] = useState<AdminAppointmentMutationAction | null>(null);
+  const confirmingRevisionRef = useRef<number | null>(null);
+  const [quickConfirmation, setQuickConfirmation] = useState<{
+    appointmentId: string;
+    action: Extract<AdminAppointmentMutationAction, "CONFIRM" | "REJECT">;
+    expectedRevision: number;
+  } | null>(null);
   const [isChangingWeek, setIsChangingWeek] = useState(false);
 
-  const [manualTypeId, setManualTypeId] = useState(dashboard.manualAppointmentTypes[0]?.id ?? "");
-  const [manualAvailability, setManualAvailability] = useState<AppointmentAvailabilityDto | null>(null);
-  const [manualAvailabilityError, setManualAvailabilityError] = useState("");
-  const [manualStartAt, setManualStartAt] = useState("");
-  const [manualFirstName, setManualFirstName] = useState("");
-  const [manualLastName, setManualLastName] = useState("");
-  const [manualCountryCode, setManualCountryCode] = useState("+49");
-  const [manualPhone, setManualPhone] = useState("");
-  const [manualDetails, setManualDetails] = useState("");
-  const [manualConsent, setManualConsent] = useState(false);
-  const [isLoadingManualAvailability, setIsLoadingManualAvailability] = useState(false);
-
   const [rescheduleTargetId, setRescheduleTargetId] = useState<string | null>(null);
+  const [rescheduleExpectedRevision, setRescheduleExpectedRevision] = useState<number | null>(null);
   const [rescheduleAvailability, setRescheduleAvailability] = useState<AppointmentAvailabilityDto | null>(null);
   const [rescheduleAvailabilityError, setRescheduleAvailabilityError] = useState("");
   const [rescheduleStartAt, setRescheduleStartAt] = useState("");
   const [isLoadingRescheduleAvailability, setIsLoadingRescheduleAvailability] = useState(false);
-
-  useEffect(() => {
-    if (
-      manualTypeId &&
-      dashboard.manualAppointmentTypes.some((appointmentType) => appointmentType.id === manualTypeId)
-    ) {
-      return;
-    }
-
-    setManualTypeId(dashboard.manualAppointmentTypes[0]?.id ?? "");
-    setManualAvailability(null);
-    setManualStartAt("");
-  }, [dashboard.manualAppointmentTypes, manualTypeId]);
+  const rescheduleRequestIdRef = useRef(0);
+  const rescheduleHeadingRef = useRef<HTMLHeadingElement>(null);
+  const rescheduleTriggerRef = useRef<HTMLButtonElement | null>(null);
 
   const selectedAppointment = dashboard.appointments.find(
     (appointment) => appointment.id === selectedAppointmentId,
@@ -199,88 +184,35 @@ export function AppointmentsTab({
     }
   }
 
-  async function loadManualAvailability(cursor?: string) {
-    if (!manualTypeId) {
-      setManualAvailabilityError("Bitte wählen Sie zuerst eine Terminart.");
-      return;
-    }
-
-    setIsLoadingManualAvailability(true);
-    setManualAvailabilityError("");
-    try {
-      const result = await getAdminAppointmentAvailability({
-        appointmentTypeId: manualTypeId,
-        ...(cursor ? { cursor } : {}),
-      });
-      if (!result.success) {
-        setManualAvailabilityError(result.error);
-        return;
-      }
-
-      setManualAvailability((current) => mergeAvailability(current, result.data, Boolean(cursor)));
-    } catch {
-      setManualAvailabilityError("Freie Termine konnten nicht geladen werden.");
-    } finally {
-      setIsLoadingManualAvailability(false);
-    }
+  function closeNewAppointment() {
+    setShowNewAppointment(false);
+    window.requestAnimationFrame(() => newAppointmentTriggerRef.current?.focus());
   }
 
-  async function handleCreateManualAppointment(event: React.FormEvent) {
-    event.preventDefault();
-    if (!manualStartAt) {
-      setOperationError("Bitte wählen Sie einen freien Termin.");
-      return;
-    }
+  function closeSettings() {
+    setShowSettings(false);
+    window.requestAnimationFrame(() => settingsTriggerRef.current?.focus());
+  }
 
-    setPendingOperation("create");
+  async function handleAppointmentCreated(status: AppointmentStatusValue) {
     setOperationError("");
-    setOperationSuccess("");
+    setOperationSuccess(
+      status === "PENDING"
+        ? "Der Termin wurde eingetragen und wartet auf Bestätigung."
+        : "Termin wurde erfolgreich eingetragen.",
+    );
+    closeNewAppointment();
     try {
-      const result = await createAdminAppointment({
-        appointmentTypeId: manualTypeId,
-        startAt: manualStartAt,
-        firstName: manualFirstName,
-        lastName: manualLastName,
-        countryCode: manualCountryCode,
-        phone: manualPhone,
-        ...(manualDetails.trim() ? { details: manualDetails } : {}),
-        gdprConsent: manualConsent,
-      });
-
-      if (!result.success) {
-        setOperationError(result.error);
-        await loadManualAvailability();
-        return;
-      }
-
-      setOperationSuccess(
-        result.data.status === "PENDING"
-          ? "Der Telefontermin wurde als offene Terminanfrage eingetragen."
-          : "Der Telefontermin wurde bestätigt eingetragen.",
-      );
-      setManualFirstName("");
-      setManualLastName("");
-      setManualPhone("");
-      setManualDetails("");
-      setManualConsent(false);
-      setManualStartAt("");
-      setManualAvailability(null);
-      setShowManualForm(false);
-      try {
-        await onReloadDashboard({ weekStart: dashboard.weekStart });
-      } catch {
-        setOperationError("Der Termin wurde gespeichert, die Übersicht konnte aber nicht aktualisiert werden.");
-      }
+      await onReloadDashboard({ weekStart: dashboard.weekStart });
     } catch {
-      setOperationError("Der Telefontermin konnte nicht angelegt werden.");
-    } finally {
-      setPendingOperation("");
+      setOperationError("Der Termin wurde gespeichert, die Übersicht konnte aber nicht aktualisiert werden.");
     }
   }
 
   async function handleAppointmentMutation(
     appointment: AdminAppointmentDto,
     action: AdminAppointmentMutationAction,
+    expectedRevision = appointment.revision,
   ) {
     setPendingOperation(`${appointment.id}:${action}`);
     setOperationError("");
@@ -288,11 +220,14 @@ export function AppointmentsTab({
     try {
       const result = await mutateAdminAppointment({
         appointmentId: appointment.id,
-        expectedRevision: appointment.revision,
+        expectedRevision,
         action,
       });
       if (!result.success) {
         setOperationError(result.error);
+        setConfirmingAction(null);
+        confirmingRevisionRef.current = null;
+        setQuickConfirmation(null);
         try {
           await onReloadDashboard({ weekStart: dashboard.weekStart });
         } catch {
@@ -309,6 +244,8 @@ export function AppointmentsTab({
             : "Der Termin wurde storniert und die Zeit freigegeben.",
       );
       setConfirmingAction(null);
+      confirmingRevisionRef.current = null;
+      setQuickConfirmation(null);
       try {
         await onReloadDashboard({ weekStart: dashboard.weekStart });
       } catch {
@@ -321,13 +258,69 @@ export function AppointmentsTab({
     }
   }
 
-  async function loadRescheduleAvailability(appointment: AdminAppointmentDto, cursor?: string) {
+  function startQuickConfirmation(
+    appointment: AdminAppointmentDto,
+    action: Extract<AdminAppointmentMutationAction, "CONFIRM" | "REJECT">,
+  ) {
+    setQuickConfirmation({
+      appointmentId: appointment.id,
+      action,
+      expectedRevision: appointment.revision,
+    });
+    setConfirmingAction(null);
+    confirmingRevisionRef.current = null;
+    setOperationError("");
+    setOperationSuccess("");
+  }
+
+  function startDetailConfirmation(
+    appointment: AdminAppointmentDto,
+    action: AdminAppointmentMutationAction,
+  ) {
+    confirmingRevisionRef.current = appointment.revision;
+    setConfirmingAction(action);
+    setOperationError("");
+    setOperationSuccess("");
+  }
+
+  function clearDetailConfirmation() {
+    setConfirmingAction(null);
+    confirmingRevisionRef.current = null;
+  }
+
+  function executeDetailConfirmation(
+    appointment: AdminAppointmentDto,
+    action: AdminAppointmentMutationAction,
+  ) {
+    const expectedRevision = confirmingRevisionRef.current;
+    if (expectedRevision === null) {
+      clearDetailConfirmation();
+      setOperationError("Der Termin hat sich geändert. Bitte prüfen Sie ihn erneut.");
+      return;
+    }
+
+    void handleAppointmentMutation(appointment, action, expectedRevision);
+  }
+
+  async function loadRescheduleAvailability(
+    appointment: AdminAppointmentDto,
+    cursor?: string,
+    trigger?: HTMLButtonElement,
+  ) {
+    const requestId = ++rescheduleRequestIdRef.current;
+    if (trigger) {
+      rescheduleTriggerRef.current = trigger;
+    }
     setRescheduleTargetId(appointment.id);
     setIsLoadingRescheduleAvailability(true);
     setRescheduleAvailabilityError("");
     if (!cursor) {
+      if (appointment.id !== rescheduleTargetId) {
+        setRescheduleExpectedRevision(appointment.revision);
+      }
       setRescheduleStartAt("");
       setRescheduleAvailability(null);
+      window.requestAnimationFrame(() => rescheduleHeadingRef.current?.focus());
     }
 
     try {
@@ -336,6 +329,9 @@ export function AppointmentsTab({
         appointmentId: appointment.id,
         ...(cursor ? { cursor } : {}),
       });
+      if (requestId !== rescheduleRequestIdRef.current) {
+        return;
+      }
       if (!result.success) {
         setRescheduleAvailabilityError(result.error);
         return;
@@ -343,14 +339,29 @@ export function AppointmentsTab({
 
       setRescheduleAvailability((current) => mergeAvailability(current, result.data, Boolean(cursor)));
     } catch {
-      setRescheduleAvailabilityError("Freie Ersatztermine konnten nicht geladen werden.");
+      if (requestId === rescheduleRequestIdRef.current) {
+        setRescheduleAvailabilityError("Freie Ersatztermine konnten nicht geladen werden.");
+      }
     } finally {
-      setIsLoadingRescheduleAvailability(false);
+      if (requestId === rescheduleRequestIdRef.current) {
+        setIsLoadingRescheduleAvailability(false);
+      }
     }
   }
 
+  function closeReschedule() {
+    rescheduleRequestIdRef.current += 1;
+    setRescheduleTargetId(null);
+    setRescheduleExpectedRevision(null);
+    setRescheduleAvailability(null);
+    setRescheduleAvailabilityError("");
+    setRescheduleStartAt("");
+    setIsLoadingRescheduleAvailability(false);
+    window.requestAnimationFrame(() => rescheduleTriggerRef.current?.focus());
+  }
+
   async function handleReschedule() {
-    if (!rescheduleTarget || !rescheduleStartAt) {
+    if (!rescheduleTarget || !rescheduleStartAt || rescheduleExpectedRevision === null) {
       setRescheduleAvailabilityError("Bitte wählen Sie eine neue Zeit.");
       return;
     }
@@ -361,7 +372,7 @@ export function AppointmentsTab({
     try {
       const result = await rescheduleAdminAppointment({
         appointmentId: rescheduleTarget.id,
-        expectedRevision: rescheduleTarget.revision,
+        expectedRevision: rescheduleExpectedRevision,
         startAt: rescheduleStartAt,
       });
       if (!result.success) {
@@ -378,9 +389,7 @@ export function AppointmentsTab({
       }
 
       setOperationSuccess("Der Termin wurde verschoben.");
-      setRescheduleTargetId(null);
-      setRescheduleAvailability(null);
-      setRescheduleStartAt("");
+      closeReschedule();
       try {
         await onReloadDashboard({ weekStart: dashboard.weekStart });
       } catch {
@@ -393,13 +402,53 @@ export function AppointmentsTab({
     }
   }
 
+  if (showSettings && isAdmin) {
+    return (
+      <AppointmentSettings
+        configuration={configuration}
+        loadError={configurationError}
+        onReload={onReloadConfiguration}
+        onClose={closeSettings}
+      />
+    );
+  }
+
   return (
     <div className="space-y-8">
-      <div className="grid gap-4 sm:grid-cols-3">
-        <AppointmentStat label="Heute" value={dashboard.todayCount} icon={<CalendarDays className="w-5 h-5 text-primary" />} />
-        <AppointmentStat label="Diese Woche" value={dashboard.weekCount} icon={<Clock3 className="w-5 h-5 text-blue-600" />} />
-        <AppointmentStat label="Offene Terminanfragen" value={dashboard.pendingCount} icon={<AlertTriangle className="w-5 h-5 text-amber-600" />} testId="appointment-pending-count" />
+      <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+        <div>
+          <p className="text-sm font-semibold text-primary">Terminverwaltung</p>
+          <h1 className="mt-1 text-3xl font-bold tracking-tight text-slate-800">Termine</h1>
+          <p className="mt-2 text-sm text-slate-500">Termine ansehen, Anfragen bearbeiten oder einen neuen Termin eintragen.</p>
+        </div>
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <Button
+            ref={newAppointmentTriggerRef}
+            type="button"
+            onClick={() => {
+              setOperationError("");
+              setOperationSuccess("");
+              setShowNewAppointment(true);
+            }}
+          >
+            <Plus className="mr-2 h-4 w-4" aria-hidden="true" />
+            Neuer Termin
+          </Button>
+          {isAdmin && (
+            <Button ref={settingsTriggerRef} type="button" variant="outline" onClick={() => setShowSettings(true)}>
+              <Settings2 className="mr-2 h-4 w-4" aria-hidden="true" />
+              Einstellungen
+            </Button>
+          )}
+        </div>
       </div>
+
+      <NewAppointmentDialog
+        open={showNewAppointment}
+        appointmentTypes={dashboard.manualAppointmentTypes}
+        onClose={closeNewAppointment}
+        onCreated={handleAppointmentCreated}
+      />
 
       {(dashboardError || operationError || operationSuccess) && (
         <div aria-live="polite" className="space-y-2">
@@ -409,110 +458,35 @@ export function AppointmentsTab({
         </div>
       )}
 
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex flex-wrap gap-2" role="group" aria-label="Terminansicht">
-          <ViewButton active={view === "today"} onClick={() => setView("today")}>Heute</ViewButton>
-          <ViewButton active={view === "week"} onClick={() => setView("week")}>Woche</ViewButton>
-          <ViewButton active={view === "pending"} onClick={() => setView("pending")}>Offen ({dashboard.pendingCount})</ViewButton>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Button variant="outline" size="sm" onClick={() => setShowManualForm((current) => !current)}>
-            <Plus className="w-4 h-4 mr-1.5" /> Telefontermin
-          </Button>
-          {isAdmin && (
-            <Button variant="outline" size="sm" onClick={() => setShowSettings((current) => !current)}>
-              Buchung konfigurieren
-            </Button>
-          )}
-        </div>
+      <div className="flex flex-wrap gap-2" role="group" aria-label="Terminansicht">
+        <ViewButton active={view === "today"} onClick={() => setView("today")}>Heute</ViewButton>
+        <ViewButton active={view === "week"} onClick={() => setView("week")}>Woche</ViewButton>
+        <ViewButton active={view === "pending"} onClick={() => setView("pending")}>
+          Offene Anfragen ({dashboard.pendingCount})
+        </ViewButton>
       </div>
 
-      {showManualForm && (
-        <form onSubmit={handleCreateManualAppointment} className="p-6 bg-white border border-slate-100 rounded-2xl shadow-card">
-          <div className="mb-6">
-            <h2 className="text-lg font-bold text-slate-800">Telefontermin eintragen</h2>
-            <p className="mt-1 text-sm text-slate-500">Die freie Zeit wird direkt aus dem zentralen Terminplan geladen.</p>
-          </div>
-          {dashboard.manualAppointmentTypes.length === 0 ? (
-            <p className="text-sm text-amber-700">Es ist noch keine aktive Terminart eingerichtet.</p>
-          ) : (
-            <div className="space-y-5">
-              <div className="grid gap-4 sm:grid-cols-2">
-                <label className="text-sm font-medium text-slate-700">
-                  Terminart
-                  <select
-                    value={manualTypeId}
-                    onChange={(event) => {
-                      setManualTypeId(event.target.value);
-                      setManualAvailability(null);
-                      setManualStartAt("");
-                    }}
-                    className="w-full h-10 px-3 mt-1.5 bg-white border rounded-md border-slate-200 focus:outline-none focus:ring-2 focus:ring-primary"
-                  >
-                    {dashboard.manualAppointmentTypes.map((appointmentType) => (
-                      <option key={appointmentType.id} value={appointmentType.id}>
-                        {appointmentType.name} · {appointmentType.durationMinutes} Min. · {appointmentType.confirmationMode === "MANUAL" ? "Prüfung nötig" : "sofort bestätigt"}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <div className="flex items-end">
-                  <Button type="button" variant="outline" onClick={() => loadManualAvailability()} disabled={isLoadingManualAvailability}>
-                    {isLoadingManualAvailability ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-2" />}
-                    Freie Termine laden
-                  </Button>
-                </div>
-              </div>
-
-              <AvailabilityPicker
-                availability={manualAvailability}
-                selectedStartAt={manualStartAt}
-                error={manualAvailabilityError}
-                loading={isLoadingManualAvailability}
-                onSelect={setManualStartAt}
-                onLoadMore={(cursor) => loadManualAvailability(cursor)}
-              />
-
-              <div className="grid gap-4 sm:grid-cols-2">
-                <Field label="Vorname" value={manualFirstName} onChange={setManualFirstName} required />
-                <Field label="Nachname" value={manualLastName} onChange={setManualLastName} required />
-                <label className="text-sm font-medium text-slate-700">
-                  Ländervorwahl
-                  <select value={manualCountryCode} onChange={(event) => setManualCountryCode(event.target.value)} required className="w-full h-10 px-3 mt-1.5 bg-white border rounded-md border-slate-200 focus:outline-none focus:ring-2 focus:ring-primary">
-                    {EUROPEAN_COUNTRY_CODES.map((country) => (
-                      <option key={country.code} value={country.code}>{country.country} {country.code}</option>
-                    ))}
-                  </select>
-                </label>
-                <Field label="Telefon" value={manualPhone} onChange={(value) => setManualPhone(value.replace(/\D/g, ""))} inputMode="tel" required />
-              </div>
-              <label className="block text-sm font-medium text-slate-700">
-                Zusätzliche Angaben (optional)
-                <Textarea value={manualDetails} onChange={(event) => setManualDetails(event.target.value)} className="mt-1.5" maxLength={1900} />
-              </label>
-              <label className="flex items-start gap-3 text-sm text-slate-700">
-                <input type="checkbox" checked={manualConsent} onChange={(event) => setManualConsent(event.target.checked)} required className="mt-1" />
-                <span>Die Einwilligung zur Verarbeitung der Termindaten wurde bestätigt.</span>
-              </label>
-              <div className="flex flex-col gap-2 sm:flex-row">
-                <Button type="submit" disabled={!manualStartAt || pendingOperation === "create"}>
-                  {pendingOperation === "create" && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                  Termin verbindlich eintragen
-                </Button>
-                <Button type="button" variant="outline" onClick={() => setShowManualForm(false)} disabled={pendingOperation === "create"}>Abbrechen</Button>
-              </div>
-            </div>
-          )}
-        </form>
+      {dashboard.pendingCount > 0 && view !== "pending" && (
+        <button
+          type="button"
+          onClick={() => setView("pending")}
+          className="flex w-full flex-col gap-2 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-left transition-colors hover:bg-amber-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 sm:flex-row sm:items-center sm:justify-between"
+        >
+          <span className="flex items-center gap-3 font-semibold text-amber-900">
+            <AlertTriangle className="h-5 w-5 shrink-0" aria-hidden="true" />
+            {dashboard.pendingCount === 1
+              ? "1 Terminanfrage wartet auf Bestätigung"
+              : `${dashboard.pendingCount} Terminanfragen warten auf Bestätigung`}
+          </span>
+          <span className="text-sm font-semibold text-amber-800">Jetzt ansehen</span>
+        </button>
       )}
 
-      {showSettings && isAdmin && (
-        <AppointmentSettings
-          configuration={configuration}
-          loadError={configurationError}
-          onReload={onReloadConfiguration}
-        />
-      )}
+      <div className="grid gap-4 sm:grid-cols-3">
+        <AppointmentStat label="Heute" value={dashboard.todayCount} icon={<CalendarDays className="w-5 h-5 text-primary" />} />
+        <AppointmentStat label="Diese Woche" value={dashboard.weekCount} icon={<Clock3 className="w-5 h-5 text-blue-600" />} />
+        <AppointmentStat label="Offene Terminanfragen" value={dashboard.pendingCount} icon={<AlertTriangle className="w-5 h-5 text-amber-600" />} testId="appointment-pending-count" />
+      </div>
 
       <section className="overflow-hidden bg-white border border-slate-100 rounded-2xl shadow-card">
         <div className="flex flex-col gap-3 px-6 py-4 border-b border-slate-100 lg:flex-row lg:items-center lg:justify-between">
@@ -520,17 +494,25 @@ export function AppointmentsTab({
             <h2 className="text-lg font-bold text-slate-800">
               {view === "today" ? "Heutige Termine" : view === "pending" ? "Offene Terminanfragen" : "Wochenübersicht"}
             </h2>
-            <p className="mt-1 text-sm text-slate-500">{dashboard.weekStart} bis {dashboard.weekEnd} · chronologisch</p>
+            <p className="mt-1 text-sm text-slate-500">
+              {view === "pending"
+                ? "Anfragen bestätigen, verschieben oder ablehnen."
+                : view === "today"
+                  ? "Alle Termine des heutigen Tages."
+                  : `${dashboard.weekStart} bis ${dashboard.weekEnd} · chronologisch`}
+            </p>
           </div>
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" aria-label="Vorherige Woche" onClick={() => reloadWeek(shiftLocalDate(dashboard.weekStart, -7))} disabled={isChangingWeek}>
-              <ChevronLeft className="w-4 h-4" />
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => reloadWeek(dashboard.todayLocalDate)} disabled={isChangingWeek}>Aktuelle Woche</Button>
-            <Button variant="outline" size="sm" aria-label="Nächste Woche" onClick={() => reloadWeek(shiftLocalDate(dashboard.weekStart, 7))} disabled={isChangingWeek}>
-              {isChangingWeek ? <Loader2 className="w-4 h-4 animate-spin" /> : <ChevronRight className="w-4 h-4" />}
-            </Button>
-          </div>
+          {view === "week" && (
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" aria-label="Vorherige Woche" onClick={() => reloadWeek(shiftLocalDate(dashboard.weekStart, -7))} disabled={isChangingWeek}>
+                <ChevronLeft className="w-4 h-4" />
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => reloadWeek(dashboard.todayLocalDate)} disabled={isChangingWeek}>Aktuelle Woche</Button>
+              <Button variant="outline" size="sm" aria-label="Nächste Woche" onClick={() => reloadWeek(shiftLocalDate(dashboard.weekStart, 7))} disabled={isChangingWeek}>
+                {isChangingWeek ? <Loader2 className="w-4 h-4 animate-spin" /> : <ChevronRight className="w-4 h-4" />}
+              </Button>
+            </div>
+          )}
         </div>
 
         {visibleAppointments.length === 0 ? (
@@ -540,34 +522,94 @@ export function AppointmentsTab({
           </div>
         ) : (
           <div className="divide-y divide-slate-100" data-testid="appointment-list">
-            {visibleAppointments.map((appointment) => (
-              <button
-                key={appointment.id}
-                type="button"
-                onClick={() => {
-                  setSelectedAppointmentId(appointment.id);
-                  setConfirmingAction(null);
-                  setOperationError("");
-                }}
-                className="w-full px-6 py-4 text-left transition-colors hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary"
-              >
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="flex items-start gap-3 min-w-0">
-                    <div className="flex items-center justify-center w-12 h-12 font-bold rounded-xl bg-primary/10 text-primary shrink-0">
-                      {appointment.startLabel}
+            {visibleAppointments.map((appointment) => {
+              const pendingConfirmation = quickConfirmation?.appointmentId === appointment.id
+                ? quickConfirmation
+                : null;
+
+              return (
+                <article key={appointment.id}>
+                  <button
+                    type="button"
+                    aria-label={`Details zu ${appointment.firstName} ${appointment.lastName} öffnen`}
+                    onClick={() => {
+                      setSelectedAppointmentId(appointment.id);
+                      setConfirmingAction(null);
+                      confirmingRevisionRef.current = null;
+                      setQuickConfirmation(null);
+                      setOperationError("");
+                    }}
+                    className="w-full px-4 py-4 text-left transition-colors hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary sm:px-6"
+                  >
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="flex min-w-0 items-start gap-3">
+                        <div className="flex h-12 w-14 shrink-0 items-center justify-center rounded-xl bg-primary/10 font-bold text-primary">
+                          {appointment.startLabel}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="truncate font-semibold text-slate-800">{appointment.firstName} {appointment.lastName}</p>
+                          <p className="text-sm text-slate-500">{appointment.dateLabel} · {appointment.typeName}</p>
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="rounded bg-slate-100 px-2 py-1 text-xs font-medium text-slate-600">{appointment.source === "ONLINE" ? "Online" : "Praxis"}</span>
+                        <span className={`rounded px-2 py-1 text-xs font-medium ${statusClass(appointment.status)}`}>{STATUS_LABELS[appointment.status]}</span>
+                      </div>
                     </div>
-                    <div className="min-w-0">
-                      <p className="font-semibold text-slate-800 truncate">{appointment.firstName} {appointment.lastName}</p>
-                      <p className="text-sm text-slate-500">{appointment.dateLabel} · {appointment.startLabel}–{appointment.endLabel} · {appointment.typeName}</p>
+                  </button>
+
+                  {view === "pending" && appointment.status === "PENDING" && (
+                    <div className="border-t border-slate-100 bg-slate-50/70 px-4 py-3 sm:px-6">
+                      <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+                        <Button size="sm" onClick={() => startQuickConfirmation(appointment, "CONFIRM")} disabled={Boolean(pendingOperation)}>
+                          <Check className="mr-1.5 h-4 w-4" aria-hidden="true" />
+                          Bestätigen
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={(event) => loadRescheduleAvailability(appointment, undefined, event.currentTarget)}
+                          disabled={Boolean(pendingOperation) || isLoadingRescheduleAvailability}
+                        >
+                          Andere Zeit
+                        </Button>
+                        <Button size="sm" variant="destructive" onClick={() => startQuickConfirmation(appointment, "REJECT")} disabled={Boolean(pendingOperation)}>
+                          Ablehnen
+                        </Button>
+                      </div>
+
+                      {pendingConfirmation && (
+                        <div className="mt-3 flex flex-col gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 sm:flex-row sm:items-center sm:justify-between">
+                          <p className="text-sm text-amber-900">
+                            {pendingConfirmation.action === "CONFIRM"
+                              ? "Diese Terminanfrage jetzt verbindlich bestätigen?"
+                              : "Diese Anfrage ablehnen und die reservierte Zeit freigeben?"}
+                          </p>
+                          <div className="flex flex-col gap-2 min-[420px]:flex-row">
+                            <Button
+                              size="sm"
+                              variant={pendingConfirmation.action === "CONFIRM" ? "default" : "destructive"}
+                              onClick={() => handleAppointmentMutation(
+                                appointment,
+                                pendingConfirmation.action,
+                                pendingConfirmation.expectedRevision,
+                              )}
+                              disabled={Boolean(pendingOperation)}
+                            >
+                              {pendingOperation === `${appointment.id}:${pendingConfirmation.action}` && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />}
+                              {pendingConfirmation.action === "CONFIRM" ? "Jetzt bestätigen" : "Jetzt ablehnen"}
+                            </Button>
+                            <Button size="sm" variant="outline" onClick={() => setQuickConfirmation(null)} disabled={Boolean(pendingOperation)}>
+                              Abbrechen
+                            </Button>
+                          </div>
+                        </div>
+                      )}
                     </div>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="px-2 py-1 text-xs font-medium rounded bg-slate-100 text-slate-600">{appointment.source === "ONLINE" ? "Online" : "Telefon"}</span>
-                    <span className={`px-2 py-1 text-xs font-medium rounded ${statusClass(appointment.status)}`}>{STATUS_LABELS[appointment.status]}</span>
-                  </div>
-                </div>
-              </button>
-            ))}
+                  )}
+                </article>
+              );
+            })}
           </div>
         )}
       </section>
@@ -587,7 +629,7 @@ export function AppointmentsTab({
             <Detail label="Terminart" value={`${selectedAppointment.typeName} · ${selectedAppointment.durationMinutes} Min.`} icon={<Clock3 className="w-4 h-4" />} />
             <Detail label="Zeit" value={`${selectedAppointment.dateLabel}, ${selectedAppointment.startLabel}–${selectedAppointment.endLabel}`} icon={<CalendarDays className="w-4 h-4" />} />
             <Detail label="Status" value={STATUS_LABELS[selectedAppointment.status]} />
-            <Detail label="Quelle" value={selectedAppointment.source === "ONLINE" ? "Online-Buchung" : "Telefon / Administration"} />
+            <Detail label="Quelle" value={selectedAppointment.source === "ONLINE" ? "Online-Buchung" : "Durch die Praxis eingetragen"} />
           </div>
           {selectedAppointment.details && (
             <div className="p-4 mt-5 rounded-xl bg-slate-50">
@@ -596,19 +638,26 @@ export function AppointmentsTab({
             </div>
           )}
 
-          {(selectedAppointment.status === "PENDING" || selectedAppointment.status === "CONFIRMED") && (
+          {(selectedAppointment.status === "CONFIRMED" || (selectedAppointment.status === "PENDING" && view !== "pending")) && (
             <div className="mt-6 space-y-3">
               <div className="flex flex-wrap gap-2">
                 {selectedAppointment.status === "PENDING" && (
                   <>
-                    <Button size="sm" onClick={() => setConfirmingAction("CONFIRM")} disabled={Boolean(pendingOperation)}><Check className="w-4 h-4 mr-1.5" />Bestätigen</Button>
-                    <Button size="sm" variant="destructive" onClick={() => setConfirmingAction("REJECT")} disabled={Boolean(pendingOperation)}>Ablehnen</Button>
+                    <Button size="sm" onClick={() => startDetailConfirmation(selectedAppointment, "CONFIRM")} disabled={Boolean(pendingOperation)}><Check className="w-4 h-4 mr-1.5" />Bestätigen</Button>
+                    <Button size="sm" variant="destructive" onClick={() => startDetailConfirmation(selectedAppointment, "REJECT")} disabled={Boolean(pendingOperation)}>Ablehnen</Button>
                   </>
                 )}
                 {selectedAppointment.status === "CONFIRMED" && (
-                  <Button size="sm" variant="destructive" onClick={() => setConfirmingAction("CANCEL")} disabled={Boolean(pendingOperation)}>Stornieren</Button>
+                  <Button size="sm" variant="destructive" onClick={() => startDetailConfirmation(selectedAppointment, "CANCEL")} disabled={Boolean(pendingOperation)}>Stornieren</Button>
                 )}
-                <Button size="sm" variant="outline" onClick={() => loadRescheduleAvailability(selectedAppointment)} disabled={Boolean(pendingOperation)}>Verschieben</Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={(event) => loadRescheduleAvailability(selectedAppointment, undefined, event.currentTarget)}
+                  disabled={Boolean(pendingOperation) || isLoadingRescheduleAvailability}
+                >
+                  {selectedAppointment.status === "PENDING" ? "Andere Zeit" : "Verschieben"}
+                </Button>
               </div>
 
               {confirmingAction && (
@@ -617,10 +666,15 @@ export function AppointmentsTab({
                     {confirmingAction === "CONFIRM" ? "Diesen Termin verbindlich bestätigen?" : confirmingAction === "REJECT" ? "Anfrage ablehnen und reservierte Zeit freigeben?" : "Termin stornieren und reservierte Zeit freigeben?"}
                   </p>
                   <div className="flex gap-2">
-                    <Button size="sm" variant={confirmingAction === "CONFIRM" ? "default" : "destructive"} onClick={() => handleAppointmentMutation(selectedAppointment, confirmingAction)} disabled={Boolean(pendingOperation)}>
+                    <Button
+                      size="sm"
+                      variant={confirmingAction === "CONFIRM" ? "default" : "destructive"}
+                      onClick={() => executeDetailConfirmation(selectedAppointment, confirmingAction)}
+                      disabled={Boolean(pendingOperation)}
+                    >
                       {pendingOperation && <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />}Ausführen
                     </Button>
-                    <Button size="sm" variant="outline" onClick={() => setConfirmingAction(null)} disabled={Boolean(pendingOperation)}>Abbrechen</Button>
+                    <Button size="sm" variant="outline" onClick={clearDetailConfirmation} disabled={Boolean(pendingOperation)}>Abbrechen</Button>
                   </div>
                 </div>
               )}
@@ -633,17 +687,26 @@ export function AppointmentsTab({
         <section className="p-6 bg-white border border-slate-100 rounded-2xl shadow-card" aria-label="Termin verschieben">
           <div className="flex items-start justify-between gap-4 mb-5">
             <div>
-              <h2 className="text-lg font-bold text-slate-800">Termin verschieben</h2>
+              <h2 ref={rescheduleHeadingRef} tabIndex={-1} className="text-lg font-bold text-slate-800 outline-none">Termin verschieben</h2>
               <p className="mt-1 text-sm text-slate-500">Aktuell: {rescheduleTarget.dateLabel}, {rescheduleTarget.startLabel}–{rescheduleTarget.endLabel}</p>
             </div>
-            <Button variant="outline" size="sm" onClick={() => setRescheduleTargetId(null)} aria-label="Verschieben schließen"><X className="w-4 h-4" /></Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={closeReschedule}
+              disabled={Boolean(pendingOperation)}
+              aria-label="Verschieben schließen"
+            >
+              <X className="w-4 h-4" />
+            </Button>
           </div>
-          <AvailabilityPicker
+          <AdminAvailabilityPicker
             availability={rescheduleAvailability}
             selectedStartAt={rescheduleStartAt}
             error={rescheduleAvailabilityError}
             loading={isLoadingRescheduleAvailability}
             onSelect={setRescheduleStartAt}
+            onRetry={() => loadRescheduleAvailability(rescheduleTarget)}
             onLoadMore={(cursor) => loadRescheduleAvailability(rescheduleTarget, cursor)}
           />
           <div className="flex flex-col gap-2 mt-5 sm:flex-row">
@@ -651,7 +714,7 @@ export function AppointmentsTab({
               {pendingOperation.endsWith(":RESCHEDULE") && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
               Neue Zeit bestätigen
             </Button>
-            <Button variant="outline" onClick={() => setRescheduleTargetId(null)} disabled={Boolean(pendingOperation)}>Abbrechen</Button>
+            <Button variant="outline" onClick={closeReschedule} disabled={Boolean(pendingOperation)}>Abbrechen</Button>
           </div>
         </section>
       )}
@@ -674,66 +737,11 @@ function ViewButton({ active, onClick, children }: { active: boolean; onClick: (
   return <Button type="button" variant={active ? "default" : "outline"} size="sm" onClick={onClick} aria-pressed={active}>{children}</Button>;
 }
 
-function Field({ label, value, onChange, required = false, inputMode }: { label: string; value: string; onChange: (value: string) => void; required?: boolean; inputMode?: React.HTMLAttributes<HTMLInputElement>["inputMode"] }) {
-  return (
-    <label className="text-sm font-medium text-slate-700">
-      {label}
-      <Input value={value} onChange={(event) => onChange(event.target.value)} required={required} inputMode={inputMode} className="mt-1.5" />
-    </label>
-  );
-}
-
 function Detail({ label, value, icon }: { label: string; value: string; icon?: React.ReactNode }) {
   return (
     <div>
       <p className="text-xs font-semibold tracking-wide uppercase text-slate-400">{label}</p>
       <p className="flex items-center gap-1.5 mt-1 text-sm font-medium text-slate-800">{icon}{value}</p>
-    </div>
-  );
-}
-
-function AvailabilityPicker({
-  availability,
-  selectedStartAt,
-  error,
-  loading,
-  onSelect,
-  onLoadMore,
-}: {
-  availability: AppointmentAvailabilityDto | null;
-  selectedStartAt: string;
-  error: string;
-  loading: boolean;
-  onSelect: (startAt: string) => void;
-  onLoadMore: (cursor: string) => void;
-}) {
-  return (
-    <div className="space-y-4" aria-live="polite">
-      {error && <p className="text-sm text-red-600">{error}</p>}
-      {availability && availability.days.length === 0 && !loading && <p className="text-sm text-slate-500">Derzeit wurden keine freien Zeiten gefunden.</p>}
-      {availability?.days.map((day) => (
-        <div key={day.date}>
-          <p className="mb-2 text-sm font-semibold text-slate-700">{day.dateLabel}</p>
-          <div className="flex flex-wrap gap-2">
-            {day.slots.map((slot) => (
-              <button
-                key={slot.startAt}
-                type="button"
-                onClick={() => onSelect(slot.startAt)}
-                aria-pressed={selectedStartAt === slot.startAt}
-                className={`px-3 py-2 text-sm font-medium border rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-primary ${selectedStartAt === slot.startAt ? "border-primary bg-primary text-white" : "border-slate-200 bg-white text-slate-700 hover:border-primary/50"}`}
-              >
-                {slot.startLabel}–{slot.endLabel}
-              </button>
-            ))}
-          </div>
-        </div>
-      ))}
-      {availability?.nextCursor && (
-        <Button type="button" variant="outline" size="sm" onClick={() => onLoadMore(availability.nextCursor!)} disabled={loading}>
-          {loading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}Weitere freie Termine
-        </Button>
-      )}
     </div>
   );
 }

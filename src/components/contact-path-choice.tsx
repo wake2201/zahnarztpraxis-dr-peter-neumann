@@ -22,6 +22,7 @@ export function ContactPathChoice() {
       <div aria-labelledby="contact-choice-heading" className="mt-8 grid gap-4 md:grid-cols-2">
         <Link
           href="/termin/buchen"
+          scroll
           className="group rounded-2xl border-2 border-primary bg-white p-6 transition-colors hover:bg-primary-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
         >
           <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary text-white">

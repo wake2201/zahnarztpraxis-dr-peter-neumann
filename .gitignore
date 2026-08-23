@@ -39,3 +39,6 @@ next-env.d.ts
 /prisma/*.db
 /prisma/migrations/
 /src/generated/prisma/
+
+.vercel
+.env*

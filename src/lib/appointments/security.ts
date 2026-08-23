@@ -22,4 +22,3 @@ export function createAppointmentSession(now = new Date()): OpaqueSecret & { exp
     expiresAt: new Date(now.getTime() + APPOINTMENT_SESSION_TTL_MS),
   };
 }
-

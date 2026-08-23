@@ -14,4 +14,3 @@ export function logUnexpectedAppointmentError(action: string, error: unknown): v
     `[${action}] Termin-Backend fehlgeschlagen`,
   );
 }
-
